@@ -1,5 +1,30 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Admin Settings</h1>
-<p>TODO: settings form.</p>
+{% if request.query_params.get("updated") %}
+<p>Settings updated.</p>
+{% endif %}
+{% if request.query_params.get("error") == "retention" %}
+<p>Retention must be a positive number.</p>
+{% endif %}
+<form method="post" action="/admin/settings">
+  <div>
+    <label for="allowed_mime_types">Allowed attachment MIME types (comma-separated)</label>
+    <input id="allowed_mime_types" name="allowed_mime_types" type="text" value="{{ allowed_mime_types }}" />
+  </div>
+  <div>
+    <label for="retention_days">Retention days</label>
+    <input id="retention_days" name="retention_days" type="number" min="1" value="{{ retention_days }}" />
+  </div>
+  <div>
+    <label for="allow_html">Allow sanitized HTML rendering</label>
+    <input id="allow_html" name="allow_html" type="checkbox" value="true" {% if allow_html %}checked{% endif %} />
+  </div>
+  <div>
+    <label for="admin_pin">Update admin PIN (leave blank to keep)</label>
+    <input id="admin_pin" name="admin_pin" type="password" />
+  </div>
+  <button type="submit">Save settings</button>
+</form>
+<p><a href="/inbox">Back to inbox</a></p>
 {% endblock %}

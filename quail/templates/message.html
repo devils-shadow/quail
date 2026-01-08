@@ -1,5 +1,37 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Message</h1>
-<p>TODO: render message.</p>
+<p><a href="/inbox">Back to inbox</a></p>
+<dl>
+  <dt>Received</dt>
+  <dd>{{ message.received_at }}</dd>
+  <dt>Envelope RCPT</dt>
+  <dd>{{ message.envelope_rcpt }}</dd>
+  <dt>From</dt>
+  <dd>{{ message.from_addr or "Unknown" }}</dd>
+  <dt>Subject</dt>
+  <dd>{{ message.subject or "(No subject)" }}</dd>
+  <dt>Date</dt>
+  <dd>{{ message.date or "Unknown" }}</dd>
+  <dt>Message ID</dt>
+  <dd>{{ message.message_id or "Unknown" }}</dd>
+  <dt>Size</dt>
+  <dd>{{ message.size_bytes }} bytes</dd>
+  {% if is_admin %}
+  <dt>Quarantined</dt>
+  <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
+  {% endif %}
+</dl>
+<h2>Body (text/plain)</h2>
+<pre>{{ body }}</pre>
+<h2>Attachments</h2>
+{% if attachments %}
+<ul>
+  {% for attachment in attachments %}
+  <li>{{ attachment.filename }} ({{ attachment.content_type }}, {{ attachment.size }} bytes)</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No attachments.</p>
+{% endif %}
 {% endblock %}
