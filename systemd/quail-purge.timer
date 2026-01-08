@@ -1,0 +1,9 @@
+[Unit]
+Description=Quail daily retention purge
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

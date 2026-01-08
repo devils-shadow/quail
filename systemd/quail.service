@@ -1,0 +1,15 @@
+[Unit]
+Description=Quail web service
+After=network.target
+
+[Service]
+Type=simple
+User=quail
+Group=quail
+WorkingDirectory=/opt/quail
+EnvironmentFile=-/etc/quail/config.env
+ExecStart=/opt/quail/venv/bin/uvicorn quail.web:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
