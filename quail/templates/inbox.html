@@ -1,6 +1,36 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Inbox</h1>
+{% if is_admin %}
+<p>Admin mode: quarantined messages are visible.</p>
+{% endif %}
+{% if messages %}
+<table>
+  <thead>
+    <tr>
+      <th>Received</th>
+      <th>From</th>
+      <th>Subject</th>
+      <th>Envelope RCPT</th>
+      <th>Size</th>
+      {% if is_admin %}<th>Quarantined</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for message in messages %}
+    <tr>
+      <td>{{ message.received_at }}</td>
+      <td>{{ message.from_addr or "Unknown" }}</td>
+      <td><a href="/message/{{ message.id }}">{{ message.subject or "(No subject)" }}</a></td>
+      <td>{{ message.envelope_rcpt }}</td>
+      <td>{{ message.size_bytes }} bytes</td>
+      {% if is_admin %}<td>{{ "Yes" if message.quarantined else "No" }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No messages yet.</p>
 {% if messages %}
   <ul>
   {% for message in messages %}
