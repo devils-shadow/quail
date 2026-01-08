@@ -1,5 +1,15 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Admin Unlock</h1>
-<p>TODO: prompt for PIN.</p>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+{% if not pin_configured %}
+<p>Admin PIN is not configured yet.</p>
+{% endif %}
+<form method="post">
+  <label for="pin">PIN</label>
+  <input id="pin" name="pin" type="password" autocomplete="current-password" required />
+  <button type="submit">Unlock</button>
+</form>
 {% endblock %}
