@@ -12,7 +12,9 @@ retention purge job, and install/upgrade automation are stubbed with TODOs.
 ## Ingest
 
 Postfix should pipe messages to `scripts/quail-ingest`, which runs the ingest
-module and stores raw `.eml` files plus metadata in SQLite.
+module and stores raw `.eml` files plus metadata in SQLite. Allowed attachments
+are extracted into the attachment directory, and attachment metadata is stored
+alongside each message.
 
 ## Configuration
 
