@@ -31,20 +31,4 @@
 </table>
 {% else %}
 <p>No messages yet.</p>
-{% if messages %}
-  <ul>
-  {% for message in messages %}
-    <li>
-      <strong>{{ message.subject or "(no subject)" }}</strong>
-      from {{ message.from_addr or "unknown" }}
-      <em>{{ message.received_at }}</em>
-      {% if is_admin and message.quarantined %}
-        <span>(quarantined)</span>
-      {% endif %}
-    </li>
-  {% endfor %}
-  </ul>
-{% else %}
-  <p>No messages yet.</p>
-{% endif %}
 {% endblock %}

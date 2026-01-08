@@ -9,6 +9,7 @@ from pathlib import Path
 import secrets
 from typing import Iterable
 
+import bleach
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -216,9 +217,69 @@ async def _startup() -> None:
     _init_settings(settings.db_path)
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[str, str]]:
+    query = """
+        SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
+        FROM messages
+        {where_clause}
+        ORDER BY received_at DESC
+        LIMIT ?
+    """
+    where_clause = "" if include_quarantined else "WHERE quarantined = 0"
+    with db.get_connection(db_path) as conn:
+        rows = conn.execute(query.format(where_clause=where_clause), (MAX_LIST_ROWS,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _get_message(db_path: Path, message_id: int) -> dict[str, str]:
+    with db.get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id, received_at, envelope_rcpt, from_addr, subject, date, message_id,
+                   size_bytes, eml_path, quarantined
+            FROM messages
+            WHERE id = ?
+            """,
+            (message_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    return dict(row)
+
+
+def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
+    raw_bytes = eml_path.read_bytes()
+    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+    body = ""
+    attachments: list[dict[str, str]] = []
+    for part in message.walk():
+        disposition = part.get_content_disposition()
+        filename = part.get_filename()
+        content_type = part.get_content_type()
+        payload = part.get_payload(decode=True)
+        size = len(payload) if payload else 0
+        if disposition == "attachment" or filename:
+            attachments.append(
+                {
+                    "filename": filename or "unnamed",
+                    "content_type": content_type,
+                    "size": str(size),
+                }
+            )
+            continue
+        if not body and part.get_content_type() == "text/plain":
+            body = part.get_content()
+    if not body:
+        body = "(No plaintext body found.)"
+    return body, attachments
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    configure_logging()
+    settings = get_settings()
+    db.init_db(settings.db_path)
+    _init_settings(settings.db_path)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -240,15 +301,21 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     message = _get_message(settings.db_path, message_id)
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
-    body, attachments = _parse_message_body(Path(message["eml_path"]))
+    allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
+    body, attachments, html_body = _parse_message_body(
+        Path(message["eml_path"]), allow_html
+    )
+    sanitized_html = _sanitize_html(html_body) if allow_html and html_body else None
     return templates.TemplateResponse(
         "message.html",
         {
             "request": request,
             "message": message,
             "body": body,
+            "html_body": sanitized_html,
             "attachments": attachments,
             "is_admin": is_admin,
+            "allow_html": allow_html,
         },
     )
 
@@ -266,8 +333,8 @@ async def admin_unlock(request: Request) -> HTMLResponse:
     )
 
 
-@app.post("/admin/unlock")
-async def admin_unlock_post(request: Request, pin: str = Form(...)) -> RedirectResponse:
+@app.post("/admin/unlock", response_class=HTMLResponse)
+async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLResponse:
     settings = get_settings()
     source_ip = _get_client_ip(request)
     now = _now()
@@ -333,7 +400,7 @@ async def admin_settings_post(
         if retention_value <= 0:
             raise ValueError
     except ValueError:
-        return RedirectResponse(url="/admin/settings?error=retention", status_code=303)
+        return RedirectResponse(url="/admin/settings?error=retention", status_code=HTTP_303_SEE_OTHER)
 
     normalized_mime_types = _normalize_mime_list(allowed_mime_types)
     if not normalized_mime_types:

@@ -31,3 +31,10 @@ Admin actions are gated by a shared PIN stored as a hash in the SQLite settings
 table (`admin_pin_hash`). Session unlocks are short-lived and require the PIN
 again after expiration. TODO: provide a supported setup flow for the initial
 PIN.
+
+## HTML rendering
+
+Message detail pages default to plaintext. Admins can enable sanitized HTML
+rendering in settings; HTML is cleaned before display and remote images are
+blocked. If HTML rendering is disabled or missing, Quail falls back to
+plaintext.
