@@ -155,7 +155,9 @@ def _normalize_mime_list(value: str) -> str:
     return ",".join(items)
 
 
-def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[str, str]]:
+def _iter_messages(
+    db_path: Path, include_quarantined: bool, inbox_filter: str | None
+) -> Iterable[dict[str, str]]:
     query = """
         SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
         FROM messages
@@ -163,9 +165,17 @@ def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[st
         ORDER BY received_at DESC
         LIMIT ?
     """
-    where_clause = "" if include_quarantined else "WHERE quarantined = 0"
+    conditions = []
+    params: list[str | int] = []
+    if not include_quarantined:
+        conditions.append("quarantined = 0")
+    if inbox_filter:
+        conditions.append("envelope_rcpt = ?")
+        params.append(inbox_filter)
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    params.append(MAX_LIST_ROWS)
     with db.get_connection(db_path) as conn:
-        rows = conn.execute(query.format(where_clause=where_clause), (MAX_LIST_ROWS,)).fetchall()
+        rows = conn.execute(query.format(where_clause=where_clause), params).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -287,10 +297,20 @@ async def _startup() -> None:
 async def inbox(request: Request) -> HTMLResponse:
     settings = get_settings()
     is_admin = _is_admin(request)
-    messages = _iter_messages(settings.db_path, include_quarantined=is_admin)
+    inbox_filter = request.query_params.get("inbox")
+    if inbox_filter:
+        inbox_filter = inbox_filter.strip() or None
+    messages = _iter_messages(
+        settings.db_path, include_quarantined=is_admin, inbox_filter=inbox_filter
+    )
     return templates.TemplateResponse(
         "inbox.html",
-        {"request": request, "messages": messages, "is_admin": is_admin},
+        {
+            "request": request,
+            "messages": messages,
+            "is_admin": is_admin,
+            "current_inbox": inbox_filter or "",
+        },
     )
 
 
@@ -316,6 +336,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "attachments": attachments,
             "is_admin": is_admin,
             "allow_html": allow_html,
+            "current_inbox": request.query_params.get("inbox") or "",
         },
     )
 

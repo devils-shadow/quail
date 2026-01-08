@@ -2,9 +2,409 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quail</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --border: #d6d9e0;
+        --text: #0f1b2d;
+        --muted: #6b7280;
+        --primary: #1f5eff;
+        --primary-dark: #1a4ed8;
+        --shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        --radius: 14px;
+        --sidebar-width: 240px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      a {
+        color: var(--primary);
+        text-decoration: none;
+      }
+
+      a:hover {
+        color: var(--primary-dark);
+      }
+
+      .app-shell {
+        display: flex;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        width: var(--sidebar-width);
+        background: #ffffff;
+        border-right: 1px solid var(--border);
+        padding: 32px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .sidebar-title {
+        font-weight: 600;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .sidebar-title span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: #f0f3ff;
+        color: var(--primary);
+      }
+
+      .sidebar-card {
+        background: #f9fafc;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .sidebar-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 8px;
+      }
+
+      .sidebar-list li {
+        font-size: 14px;
+        color: var(--text);
+      }
+
+      .sidebar-list a {
+        color: var(--text);
+      }
+
+      .sidebar-list a:hover {
+        color: var(--primary);
+      }
+
+      .sidebar-empty {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0;
+      }
+
+      .sidebar-settings {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #ffffff;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .sidebar-settings::before {
+        content: "⚙";
+        font-size: 16px;
+      }
+
+      .main-content {
+        flex: 1;
+        padding: 32px 40px 48px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+
+      .page-title {
+        font-size: 30px;
+        margin: 0;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .toolbar form {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .input {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        min-width: 240px;
+      }
+
+      .button {
+        border: 1px solid var(--primary);
+        background: var(--primary);
+        color: #ffffff;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .button.secondary {
+        background: #ffffff;
+        color: var(--primary);
+      }
+
+      .button.icon {
+        width: 42px;
+        height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+
+      .table thead {
+        background: #f4f6fb;
+      }
+
+      .table th,
+      .table td {
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .table th:last-child,
+      .table td:last-child {
+        text-align: right;
+      }
+
+      .table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .row-muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        background: #fff2ea;
+        color: #c2410c;
+        font-weight: 600;
+      }
+
+      .message-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .breadcrumb {
+        font-size: 16px;
+        color: var(--muted);
+      }
+
+      .breadcrumb strong {
+        color: var(--text);
+      }
+
+      .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .details-grid dt {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .details-grid dd {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 18px;
+        border-bottom: 1px solid var(--border);
+        padding: 0 20px;
+      }
+
+      .tab {
+        padding: 14px 0;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .tab.active {
+        color: var(--primary);
+        border-bottom: 3px solid var(--primary);
+      }
+
+      .message-body {
+        padding: 24px 20px 32px;
+      }
+
+      .message-body pre {
+        white-space: pre-wrap;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 64px 20px;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      @media (max-width: 960px) {
+        .app-shell {
+          flex-direction: column;
+        }
+
+        .sidebar {
+          width: 100%;
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+
+        .main-content {
+          padding: 24px;
+        }
+
+        .page-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .toolbar {
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+    </style>
   </head>
-  <body>
-    {% block content %}{% endblock %}
+  <body data-current-inbox="{{ current_inbox | default('') }}">
+    <div class="app-shell">
+      {% if show_sidebar | default(true) %}
+      <aside class="sidebar">
+        <div class="sidebar-card">
+          <div class="sidebar-title">
+            <span>✉️</span>
+            Recent Inboxes
+          </div>
+          <ul class="sidebar-list" id="recent-inboxes"></ul>
+          <p class="sidebar-empty" id="recent-inboxes-empty">No recent filters yet.</p>
+        </div>
+        <a class="sidebar-settings" href="/admin/unlock">Settings</a>
+      </aside>
+      {% endif %}
+      <main class="main-content">{% block content %}{% endblock %}</main>
+    </div>
+    <script>
+      const storageKey = "quailRecentInboxes";
+      const currentInbox = document.body.dataset.currentInbox;
+      const listEl = document.getElementById("recent-inboxes");
+      const emptyEl = document.getElementById("recent-inboxes-empty");
+
+      const readRecent = () => {
+        try {
+          const raw = window.localStorage.getItem(storageKey);
+          return raw ? JSON.parse(raw) : [];
+        } catch (error) {
+          return [];
+        }
+      };
+
+      const writeRecent = (items) => {
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify(items));
+        } catch (error) {
+          // Ignore storage errors.
+        }
+      };
+
+      const updateRecent = () => {
+        if (!listEl || !emptyEl) {
+          return;
+        }
+        const items = readRecent();
+        listEl.innerHTML = "";
+        items.forEach((item) => {
+          const li = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = `/inbox?inbox=${encodeURIComponent(item)}`;
+          link.textContent = item;
+          li.appendChild(link);
+          listEl.appendChild(li);
+        });
+        emptyEl.style.display = items.length ? "none" : "block";
+      };
+
+      const bumpInbox = (value) => {
+        if (!value) {
+          return;
+        }
+        const normalized = value.trim();
+        if (!normalized) {
+          return;
+        }
+        const items = readRecent().filter((item) => item !== normalized);
+        items.unshift(normalized);
+        writeRecent(items.slice(0, 5));
+      };
+
+      if (currentInbox) {
+        bumpInbox(currentInbox);
+      }
+      updateRecent();
+    </script>
   </body>
 </html>
