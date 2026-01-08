@@ -22,8 +22,13 @@
   <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
   {% endif %}
 </dl>
+{% if allow_html and html_body %}
+<h2>Body (sanitized HTML)</h2>
+<div class="message-html">{{ html_body | safe }}</div>
+{% else %}
 <h2>Body (text/plain)</h2>
 <pre>{{ body }}</pre>
+{% endif %}
 <h2>Attachments</h2>
 {% if attachments %}
 <ul>
