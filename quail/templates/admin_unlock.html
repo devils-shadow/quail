@@ -6,17 +6,11 @@
 {% elif error == "rate_limited" %}
 <p>Too many attempts. Please wait a few minutes.</p>
 {% endif %}
-<form method="post" action="/admin/unlock">
-  <label for="pin">Admin PIN</label>
-  <input id="pin" name="pin" type="password" required />
-{% if error %}
-<p class="error">{{ error }}</p>
-{% endif %}
 {% if not pin_configured %}
 <p>Admin PIN is not configured yet.</p>
 {% endif %}
-<form method="post">
-  <label for="pin">PIN</label>
+<form method="post" action="/admin/unlock">
+  <label for="pin">Admin PIN</label>
   <input id="pin" name="pin" type="password" autocomplete="current-password" required />
   <button type="submit">Unlock</button>
 </form>
