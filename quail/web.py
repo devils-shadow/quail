@@ -9,6 +9,7 @@ from pathlib import Path
 import secrets
 from typing import Iterable
 
+import bleach
 from fastapi import FastAPI, Form, HTTPException, Request
 import secrets
 
@@ -162,10 +163,43 @@ def _get_message(db_path: Path, message_id: int) -> dict[str, str]:
     return dict(row)
 
 
-def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
+ALLOWED_HTML_TAGS = [
+    "a",
+    "b",
+    "blockquote",
+    "br",
+    "code",
+    "em",
+    "i",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "span",
+    "strong",
+    "ul",
+]
+ALLOWED_HTML_ATTRIBUTES = {"a": ["href", "title", "rel"]}
+ALLOWED_HTML_PROTOCOLS = ["http", "https", "mailto"]
+
+
+def _sanitize_html(raw_html: str) -> str:
+    return bleach.clean(
+        raw_html,
+        tags=ALLOWED_HTML_TAGS,
+        attributes=ALLOWED_HTML_ATTRIBUTES,
+        protocols=ALLOWED_HTML_PROTOCOLS,
+        strip=True,
+    )
+
+
+def _parse_message_body(
+    eml_path: Path, allow_html: bool
+) -> tuple[str, list[dict[str, str]], str | None]:
     raw_bytes = eml_path.read_bytes()
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     body = ""
+    html_body: str | None = None
     attachments: list[dict[str, str]] = []
     for part in message.walk():
         disposition = part.get_content_disposition()
@@ -184,9 +218,11 @@ def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
             continue
         if not body and part.get_content_type() == "text/plain":
             body = part.get_content()
+        if allow_html and html_body is None and content_type == "text/html":
+            html_body = part.get_content()
     if not body:
         body = "(No plaintext body found.)"
-    return body, attachments
+    return body, attachments, html_body
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory="quail/templates")
 
@@ -406,15 +442,21 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     message = _get_message(settings.db_path, message_id)
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
-    body, attachments = _parse_message_body(Path(message["eml_path"]))
+    allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
+    body, attachments, html_body = _parse_message_body(
+        Path(message["eml_path"]), allow_html
+    )
+    sanitized_html = _sanitize_html(html_body) if allow_html and html_body else None
     return templates.TemplateResponse(
         "message.html",
         {
             "request": request,
             "message": message,
             "body": body,
+            "html_body": sanitized_html,
             "attachments": attachments,
             "is_admin": is_admin,
+            "allow_html": allow_html,
         },
     )
 
