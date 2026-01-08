@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
@@ -10,6 +11,7 @@ import secrets
 from typing import Iterable
 
 import bleach
+from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -38,6 +40,7 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -182,75 +185,70 @@ def _get_message(db_path: Path, message_id: int) -> dict[str, str]:
     return dict(row)
 
 
-def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
-    raw_bytes = eml_path.read_bytes()
-    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
-    body = ""
-    attachments: list[dict[str, str]] = []
-    for part in message.walk():
-        disposition = part.get_content_disposition()
-        filename = part.get_filename()
-        content_type = part.get_content_type()
-        payload = part.get_payload(decode=True)
-        size = len(payload) if payload else 0
-        if disposition == "attachment" or filename:
-            attachments.append(
-                {
-                    "filename": filename or "unnamed",
-                    "content_type": content_type,
-                    "size": str(size),
-                }
-            )
-            continue
-        if not body and part.get_content_type() == "text/plain":
-            body = part.get_content()
-    if not body:
-        body = "(No plaintext body found.)"
-    return body, attachments
-
-
-@app.on_event("startup")
-async def _startup() -> None:
-    configure_logging()
-    settings = get_settings()
-    db.init_db(settings.db_path)
-    _init_settings(settings.db_path)
-
-
-def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[str, str]]:
-    query = """
-        SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
-        FROM messages
-        {where_clause}
-        ORDER BY received_at DESC
-        LIMIT ?
-    """
-    where_clause = "" if include_quarantined else "WHERE quarantined = 0"
+def _get_message_attachments(db_path: Path, message_id: int) -> list[dict[str, str]]:
     with db.get_connection(db_path) as conn:
-        rows = conn.execute(query.format(where_clause=where_clause), (MAX_LIST_ROWS,)).fetchall()
+        rows = conn.execute(
+            """
+            SELECT filename, stored_path, content_type, size_bytes
+            FROM attachments
+            WHERE message_id = ?
+            """,
+            (message_id,),
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
-def _get_message(db_path: Path, message_id: int) -> dict[str, str]:
-    with db.get_connection(db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT id, received_at, envelope_rcpt, from_addr, subject, date, message_id,
-                   size_bytes, eml_path, quarantined
-            FROM messages
-            WHERE id = ?
-            """,
-            (message_id,),
-        ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Message not found.")
-    return dict(row)
+def _sanitize_html(html_body: str) -> str:
+    allowed_tags = [
+        "a",
+        "p",
+        "br",
+        "strong",
+        "em",
+        "ul",
+        "ol",
+        "li",
+        "blockquote",
+        "code",
+        "pre",
+    ]
+    allowed_attributes = {
+        "a": ["href", "title", "rel"],
+    }
+    return bleach.clean(
+        html_body,
+        tags=allowed_tags,
+        attributes=allowed_attributes,
+        protocols=["http", "https", "mailto"],
+        strip=True,
+    )
 
 
-def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
+def _delete_path(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        LOGGER.exception("Failed to delete file at %s", path)
+
+
+def _delete_message(settings_db_path: Path, message_id: int) -> None:
+    message = _get_message(settings_db_path, message_id)
+    attachments = _get_message_attachments(settings_db_path, message_id)
+    for attachment in attachments:
+        _delete_path(Path(attachment["stored_path"]))
+    _delete_path(Path(message["eml_path"]))
+    with db.get_connection(settings_db_path) as conn:
+        conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        conn.commit()
+
+
+def _parse_message_body(
+    eml_path: Path, allow_html: bool
+) -> tuple[str, list[dict[str, str]], str | None]:
     raw_bytes = eml_path.read_bytes()
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     body = ""
+    html_body: str | None = None
     attachments: list[dict[str, str]] = []
     for part in message.walk():
         disposition = part.get_content_disposition()
@@ -269,9 +267,11 @@ def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
             continue
         if not body and part.get_content_type() == "text/plain":
             body = part.get_content()
+        if allow_html and html_body is None and part.get_content_type() == "text/html":
+            html_body = part.get_content()
     if not body:
         body = "(No plaintext body found.)"
-    return body, attachments
+    return body, attachments, html_body
 
 
 @app.on_event("startup")
@@ -320,6 +320,16 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     )
 
 
+@app.post("/admin/message/{message_id}/delete")
+async def admin_delete_message(request: Request, message_id: int) -> RedirectResponse:
+    if not _is_admin(request):
+        return RedirectResponse(url="/admin/unlock", status_code=303)
+    settings = get_settings()
+    _delete_message(settings.db_path, message_id)
+    _log_admin_action(settings.db_path, f"admin_message_deleted:{message_id}", request)
+    return RedirectResponse(url="/inbox", status_code=303)
+
+
 @app.get("/admin/unlock", response_class=HTMLResponse)
 async def admin_unlock(request: Request) -> HTMLResponse:
     settings = get_settings()
@@ -345,9 +355,14 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
     if stored_hash is None:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(pin))
         _log_admin_action(settings.db_path, "admin_pin_initialized", request)
-    elif not verify_pin(pin, stored_hash):
-        _record_rate_limit_failure(settings.db_path, source_ip, now)
-        return RedirectResponse(url="/admin/unlock?error=invalid", status_code=303)
+    elif stored_hash is not None:
+        try:
+            is_valid = verify_pin(pin, stored_hash)
+        except (VerifyMismatchError, InvalidHash):
+            is_valid = False
+        if not is_valid:
+            _record_rate_limit_failure(settings.db_path, source_ip, now)
+            return RedirectResponse(url="/admin/unlock?error=invalid", status_code=303)
 
     _reset_rate_limit(settings.db_path, source_ip)
     token = secrets.token_urlsafe(32)

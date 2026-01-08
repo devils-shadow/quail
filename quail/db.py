@@ -59,6 +59,7 @@ SCHEMA = [
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -127,6 +128,8 @@ def clear_rate_limit_state(db_path: Path, source_ip: str) -> None:
     with get_connection(db_path) as conn:
         conn.execute("DELETE FROM admin_rate_limits WHERE source_ip = ?", (source_ip,))
         conn.commit()
+
+
 def list_messages(db_path: Path, include_quarantined: bool) -> Iterable[sqlite3.Row]:
     query = """
         SELECT
