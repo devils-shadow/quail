@@ -1,5 +1,17 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Admin Settings</h1>
-<p>TODO: settings form.</p>
+<form method="post">
+  <label for="allowed_attachment_mime_types">
+    Allowed attachment MIME types (comma-separated)
+  </label>
+  <input
+    id="allowed_attachment_mime_types"
+    name="allowed_attachment_mime_types"
+    type="text"
+    value="{{ allowed_attachment_mime_types }}"
+  />
+  <p>Default: application/pdf</p>
+  <button type="submit">Save</button>
+</form>
 {% endblock %}
