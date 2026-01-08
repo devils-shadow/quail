@@ -1,0 +1,10 @@
+[Unit]
+Description=Quail retention purge
+
+[Service]
+Type=oneshot
+User=quail
+Group=quail
+WorkingDirectory=/opt/quail
+EnvironmentFile=-/etc/quail/config.env
+ExecStart=/opt/quail/venv/bin/python -m quail.purge
