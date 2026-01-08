@@ -9,14 +9,14 @@
         type="text"
         name="inbox"
         value="{{ current_inbox | default('') }}"
-        placeholder="Filter inbox (e.g. trucks@m.cst.ro)"
+        placeholder="Filter inbox (e.g. test or hamara*)"
       />
-      <button class="button" type="submit">GO</button>
+      <button class="button square" type="submit">GO</button>
     </form>
-    <button class="button secondary icon" type="button" aria-label="Delete messages" disabled>
+    <button class="button secondary icon" id="trash-button" type="button" aria-label="Delete messages">
       🗑️
     </button>
-    <button class="button secondary icon" type="button" aria-label="Pause refresh" disabled>
+    <button class="button secondary icon" id="pause-button" type="button" aria-label="Pause refresh">
       ⏸️
     </button>
   </div>
@@ -38,9 +38,9 @@
       {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
       {% endif %}
       {% for message in messages %}
-      <tr>
+      <tr data-message-id="{{ message.id }}">
         <td>
-          <input type="checkbox" aria-label="Select message" />
+          <input class="message-select" type="checkbox" aria-label="Select message" />
           {{ message.from_addr or "Unknown" }}
           {% if is_admin and message.quarantined %}
           <span class="badge">Quarantined</span>
@@ -55,8 +55,13 @@
         <td>{{ message.received_at }}</td>
       </tr>
       {% endfor %}
+      <tr data-empty-state style="display: none;">
+        <td colspan="3">
+          <div class="empty-state">This inbox is currently empty.</div>
+        </td>
+      </tr>
       {% else %}
-      <tr>
+      <tr data-empty-state>
         <td colspan="3">
           <div class="empty-state">This inbox is currently empty.</div>
         </td>
@@ -65,4 +70,101 @@
     </tbody>
   </table>
 </div>
+<script>
+  const hiddenKey = "quailHiddenMessages";
+  const pauseKey = "quailInboxPaused";
+  const rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
+  const emptyRow = document.querySelector("[data-empty-state]");
+  const trashButton = document.getElementById("trash-button");
+  const pauseButton = document.getElementById("pause-button");
+
+  const readHidden = () => {
+    try {
+      const raw = window.sessionStorage.getItem(hiddenKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writeHidden = (items) => {
+    try {
+      window.sessionStorage.setItem(hiddenKey, JSON.stringify(items));
+    } catch (error) {
+      // Ignore storage errors.
+    }
+  };
+
+  const updateEmptyState = () => {
+    if (!emptyRow) {
+      return;
+    }
+    const visibleRows = rows.filter((row) => !row.classList.contains("row-hidden"));
+    emptyRow.style.display = visibleRows.length ? "none" : "table-row";
+  };
+
+  const applyHidden = () => {
+    const hidden = new Set(readHidden());
+    rows.forEach((row) => {
+      const id = row.dataset.messageId;
+      if (hidden.has(id)) {
+        row.classList.add("row-hidden");
+      }
+    });
+    updateEmptyState();
+  };
+
+  const updatePauseButton = () => {
+    if (!pauseButton) {
+      return;
+    }
+    const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
+    pauseButton.classList.toggle("paused", isPaused);
+    pauseButton.setAttribute(
+      "aria-label",
+      isPaused ? "Resume refresh" : "Pause refresh"
+    );
+    pauseButton.setAttribute(
+      "title",
+      isPaused ? "Resume refresh (this session only)" : "Pause refresh (this session only)"
+    );
+  };
+
+  if (trashButton) {
+    trashButton.addEventListener("click", () => {
+      const selected = rows.filter((row) =>
+        row.querySelector(".message-select")?.checked
+      );
+      if (!selected.length) {
+        return;
+      }
+      const hidden = new Set(readHidden());
+      selected.forEach((row) => {
+        const id = row.dataset.messageId;
+        if (id) {
+          hidden.add(id);
+          row.classList.add("row-hidden");
+        }
+        const checkbox = row.querySelector(".message-select");
+        if (checkbox) {
+          checkbox.checked = false;
+        }
+      });
+      writeHidden(Array.from(hidden));
+      updateEmptyState();
+    });
+  }
+
+  if (pauseButton) {
+    pauseButton.addEventListener("click", () => {
+      const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
+      window.sessionStorage.setItem(pauseKey, String(!isPaused));
+      updatePauseButton();
+    });
+    updatePauseButton();
+  }
+
+  applyHidden();
+</script>
 {% endblock %}
