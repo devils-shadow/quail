@@ -13,9 +13,18 @@ from quail import db
 from quail.ingest import DEFAULT_ALLOWED_MIME_TYPES, SETTINGS_ALLOWED_MIME_KEY
 from quail.settings import get_settings
 
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from quail import db
 from quail.logging_config import configure_logging
+from quail.settings import SETTINGS_RETENTION_DAYS_KEY, get_retention_days, get_settings
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 app = FastAPI(title="Quail")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
@@ -38,6 +47,32 @@ async def _startup() -> None:
     db.init_db(settings.db_path)
 
 
+@app.get("/admin/settings", response_class=HTMLResponse)
+async def admin_settings(request: Request) -> HTMLResponse:
+    settings = get_settings()
+    retention_days = get_retention_days(settings.db_path)
+    return templates.TemplateResponse(
+        request,
+        "admin_settings.html",
+        {"retention_days": retention_days, "error": None},
+    )
+
+
+@app.post("/admin/settings", response_class=HTMLResponse)
+async def admin_settings_update(
+    request: Request, retention_days: int = Form(..., ge=1)
+) -> HTMLResponse:
+    settings = get_settings()
+    # TODO: Require admin PIN session before updating settings.
+    if retention_days < 1:
+        return templates.TemplateResponse(
+            request,
+            "admin_settings.html",
+            {"retention_days": retention_days, "error": "Retention must be at least 1 day."},
+            status_code=400,
+        )
+    db.set_setting(settings.db_path, SETTINGS_RETENTION_DAYS_KEY, str(retention_days))
+    return RedirectResponse(url="/admin/settings", status_code=303)
 @app.get("/")
 async def inbox(request: Request) -> object:
     settings = get_settings()
