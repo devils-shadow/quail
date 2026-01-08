@@ -1,35 +1,68 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Inbox</h1>
-{% if is_admin %}
-<p>Admin mode: quarantined messages are visible.</p>
-{% endif %}
-{% if messages %}
-<table>
-  <thead>
-    <tr>
-      <th>Received</th>
-      <th>From</th>
-      <th>Subject</th>
-      <th>Envelope RCPT</th>
-      <th>Size</th>
-      {% if is_admin %}<th>Quarantined</th>{% endif %}
-    </tr>
-  </thead>
-  <tbody>
-    {% for message in messages %}
-    <tr>
-      <td>{{ message.received_at }}</td>
-      <td>{{ message.from_addr or "Unknown" }}</td>
-      <td><a href="/message/{{ message.id }}">{{ message.subject or "(No subject)" }}</a></td>
-      <td>{{ message.envelope_rcpt }}</td>
-      <td>{{ message.size_bytes }} bytes</td>
-      {% if is_admin %}<td>{{ "Yes" if message.quarantined else "No" }}</td>{% endif %}
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p>No messages yet.</p>
-{% endif %}
+<div class="page-header">
+  <h1 class="page-title">Public Messages</h1>
+  <div class="toolbar">
+    <form method="get" action="/inbox">
+      <input
+        class="input"
+        type="text"
+        name="inbox"
+        value="{{ current_inbox | default('') }}"
+        placeholder="Filter inbox (e.g. trucks@m.cst.ro)"
+      />
+      <button class="button" type="submit">GO</button>
+    </form>
+    <button class="button secondary icon" type="button" aria-label="Delete messages" disabled>
+      🗑️
+    </button>
+    <button class="button secondary icon" type="button" aria-label="Pause refresh" disabled>
+      ⏸️
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>From</th>
+        <th>Subject</th>
+        <th>Received</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if messages %}
+      {% set inbox_query = "" %}
+      {% if current_inbox %}
+      {% set inbox_query = "?inbox=" ~ current_inbox %}
+      {% endif %}
+      {% for message in messages %}
+      <tr>
+        <td>
+          <input type="checkbox" aria-label="Select message" />
+          {{ message.from_addr or "Unknown" }}
+          {% if is_admin and message.quarantined %}
+          <span class="badge">Quarantined</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="/message/{{ message.id }}{{ inbox_query }}">
+            {{ message.subject or "(No subject)" }}
+          </a>
+          <div class="row-muted">{{ message.envelope_rcpt }}</div>
+        </td>
+        <td>{{ message.received_at }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="3">
+          <div class="empty-state">This inbox is currently empty.</div>
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

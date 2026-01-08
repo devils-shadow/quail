@@ -1,47 +1,79 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Message</h1>
-<p><a href="/inbox">Back to inbox</a></p>
-<dl>
-  <dt>Received</dt>
-  <dd>{{ message.received_at }}</dd>
-  <dt>Envelope RCPT</dt>
-  <dd>{{ message.envelope_rcpt }}</dd>
-  <dt>From</dt>
-  <dd>{{ message.from_addr or "Unknown" }}</dd>
-  <dt>Subject</dt>
-  <dd>{{ message.subject or "(No subject)" }}</dd>
-  <dt>Date</dt>
-  <dd>{{ message.date or "Unknown" }}</dd>
-  <dt>Message ID</dt>
-  <dd>{{ message.message_id or "Unknown" }}</dd>
-  <dt>Size</dt>
-  <dd>{{ message.size_bytes }} bytes</dd>
-  {% if is_admin %}
-  <dt>Quarantined</dt>
-  <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
-  {% endif %}
-</dl>
-{% if is_admin %}
-<form method="post" action="/admin/message/{{ message.id }}/delete">
-  <button type="submit">Delete message</button>
-</form>
+{% set inbox_query = "" %}
+{% if current_inbox %}
+{% set inbox_query = "?inbox=" ~ current_inbox %}
 {% endif %}
-{% if allow_html and html_body %}
-<h2>Body (sanitized HTML)</h2>
-<div class="message-html">{{ html_body | safe }}</div>
-{% else %}
-<h2>Body (text/plain)</h2>
-<pre>{{ body }}</pre>
-{% endif %}
-<h2>Attachments</h2>
-{% if attachments %}
-<ul>
-  {% for attachment in attachments %}
-  <li>{{ attachment.filename }} ({{ attachment.content_type }}, {{ attachment.size }} bytes)</li>
-  {% endfor %}
-</ul>
-{% else %}
-<p>No attachments.</p>
-{% endif %}
+<div class="message-header">
+  <div class="breadcrumb">
+    <strong>Public Message</strong>
+    <span>›</span>
+    {{ message.subject or "(No subject)" }}
+  </div>
+  <a href="/inbox{{ inbox_query }}">Back to Inbox</a>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+  <div class="details-grid">
+    <dl>
+      <dt>To</dt>
+      <dd>{{ message.envelope_rcpt }}</dd>
+      <dt>From</dt>
+      <dd>{{ message.from_addr or "Unknown" }}</dd>
+      <dt>Date</dt>
+      <dd>{{ message.date or "Unknown" }}</dd>
+    </dl>
+    <dl>
+      <dt>Received</dt>
+      <dd>{{ message.received_at }}</dd>
+      <dt>Message ID</dt>
+      <dd>{{ message.message_id or "Unknown" }}</dd>
+      <dt>Size</dt>
+      <dd>{{ message.size_bytes }} bytes</dd>
+      {% if is_admin %}
+      <dt>Quarantined</dt>
+      <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
+      {% endif %}
+    </dl>
+    {% if is_admin %}
+    <div style="display: flex; justify-content: flex-end; align-items: flex-start;">
+      <form method="post" action="/admin/message/{{ message.id }}/delete">
+        <button class="button secondary" type="submit">Delete</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    {% if allow_html and html_body %}
+    <div class="tab active">HTML</div>
+    <div class="tab">TEXT</div>
+    {% else %}
+    <div class="tab active">TEXT</div>
+    {% endif %}
+    <div class="tab">ATTACHMENTS</div>
+  </div>
+  <div class="message-body">
+    {% if allow_html and html_body %}
+    <div class="message-html">{{ html_body | safe }}</div>
+    <hr />
+    <pre>{{ body }}</pre>
+    {% else %}
+    <pre>{{ body }}</pre>
+    {% endif %}
+
+    <h3>Attachments</h3>
+    {% if attachments %}
+    <ul>
+      {% for attachment in attachments %}
+      <li>{{ attachment.filename }} ({{ attachment.content_type }}, {{ attachment.size }} bytes)</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="row-muted">No attachments.</p>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}
