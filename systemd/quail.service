@@ -8,7 +8,9 @@ User=quail
 Group=quail
 WorkingDirectory=/opt/quail
 EnvironmentFile=-/etc/quail/config.env
-ExecStart=/opt/quail/venv/bin/uvicorn quail.web:app --host 127.0.0.1 --port 8000
+Environment=QUAIL_BIND_HOST=192.168.0.252
+Environment=QUAIL_BIND_PORT=8000
+ExecStart=/opt/quail/venv/bin/uvicorn quail.web:app --host ${QUAIL_BIND_HOST} --port ${QUAIL_BIND_PORT}
 Restart=on-failure
 
 [Install]

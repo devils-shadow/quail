@@ -15,22 +15,22 @@ and install/upgrade automation are still stubbed with TODOs.
 Postfix should pipe messages to `scripts/quail-ingest`, which runs the ingest
 module and stores raw `.eml` files plus metadata in SQLite.
 Oversize messages are rejected at SMTP via Postfix and dropped by the ingest
-pipeline when they exceed the configured maximum size.
-module and stores raw `.eml` files plus metadata in SQLite. Allowed attachments
-are extracted into the attachment directory, and attachment metadata is stored
+pipeline when they exceed the configured maximum size. Allowed attachments are
+extracted into the attachment directory, and attachment metadata is stored
 alongside each message.
 
 ## Configuration
 
 Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
-needed.
+needed. The default bind host in the example config is `192.168.0.252` to match
+your VPN-accessible IP; update it if your server uses a different address.
 
 ## Admin access
 
 Admin actions are gated by a shared PIN stored as a hash in the SQLite settings
 table (`admin_pin_hash`). Session unlocks are short-lived and require the PIN
 again after expiration. TODO: provide a supported setup flow for the initial
-PIN.
+PIN. Admins can delete messages immediately from the message detail view.
 
 ## HTML rendering
 
@@ -38,3 +38,9 @@ Message detail pages default to plaintext. Admins can enable sanitized HTML
 rendering in settings; HTML is cleaned before display and remote images are
 blocked. If HTML rendering is disabled or missing, Quail falls back to
 plaintext.
+
+## Install location
+
+The install script and systemd units assume the repository is cloned to
+`/opt/quail`. If you want to install from `/home/cst`, you must update
+`install.sh` and the systemd unit paths accordingly before running install.
