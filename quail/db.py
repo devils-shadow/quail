@@ -23,6 +23,17 @@ SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        stored_path TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -34,6 +45,13 @@ SCHEMA = [
         action TEXT NOT NULL,
         source_ip TEXT NOT NULL,
         performed_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS admin_rate_limits (
+        source_ip TEXT PRIMARY KEY,
+        attempts INTEGER NOT NULL,
+        window_start TEXT NOT NULL
     )
     """,
 ]
@@ -72,3 +90,64 @@ def set_setting(db_path: Path, key: str, value: str) -> None:
 def iter_settings(db_path: Path) -> Iterable[sqlite3.Row]:
     with get_connection(db_path) as conn:
         yield from conn.execute("SELECT key, value FROM settings ORDER BY key")
+
+
+def log_admin_action(db_path: Path, action: str, source_ip: str, performed_at: str) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            "INSERT INTO admin_actions (action, source_ip, performed_at) VALUES (?, ?, ?)",
+            (action, source_ip, performed_at),
+        )
+        conn.commit()
+
+
+def get_rate_limit_state(db_path: Path, source_ip: str) -> sqlite3.Row | None:
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            "SELECT source_ip, attempts, window_start FROM admin_rate_limits WHERE source_ip = ?",
+            (source_ip,),
+        ).fetchone()
+
+
+def set_rate_limit_state(
+    db_path: Path, source_ip: str, attempts: int, window_start: str
+) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            "INSERT INTO admin_rate_limits (source_ip, attempts, window_start) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(source_ip) DO UPDATE SET "
+            "attempts = excluded.attempts, window_start = excluded.window_start",
+            (source_ip, attempts, window_start),
+        )
+        conn.commit()
+
+
+def clear_rate_limit_state(db_path: Path, source_ip: str) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM admin_rate_limits WHERE source_ip = ?", (source_ip,))
+        conn.commit()
+def list_messages(db_path: Path, include_quarantined: bool) -> Iterable[sqlite3.Row]:
+    query = """
+        SELECT
+            id,
+            received_at,
+            envelope_rcpt,
+            from_addr,
+            subject,
+            date,
+            message_id,
+            size_bytes,
+            eml_path,
+            quarantined
+        FROM messages
+    """
+    params: tuple[()] | tuple[int]
+    if include_quarantined:
+        params = ()
+    else:
+        query += " WHERE quarantined = ?"
+        params = (0,)
+    query += " ORDER BY received_at DESC"
+    with get_connection(db_path) as conn:
+        yield from conn.execute(query, params)

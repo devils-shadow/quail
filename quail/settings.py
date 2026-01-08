@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from quail import db
 
 @dataclass(frozen=True)
 class Settings:
@@ -23,6 +24,8 @@ DEFAULT_ATTACHMENT_DIR = Path(
 )
 DEFAULT_DB_PATH = Path(os.getenv("QUAIL_DB_PATH", str(DEFAULT_DATA_DIR / "quail.db")))
 DEFAULT_MAX_MESSAGE_SIZE_MB = int(os.getenv("QUAIL_MAX_MESSAGE_SIZE_MB", "10"))
+DEFAULT_RETENTION_DAYS = int(os.getenv("QUAIL_RETENTION_DAYS", "30"))
+SETTINGS_RETENTION_DAYS_KEY = "retention_days"
 
 
 def get_settings() -> Settings:
@@ -33,3 +36,19 @@ def get_settings() -> Settings:
         db_path=DEFAULT_DB_PATH,
         max_message_size_mb=DEFAULT_MAX_MESSAGE_SIZE_MB,
     )
+
+
+def get_retention_days(db_path: Path) -> int:
+    value = db.get_setting(db_path, SETTINGS_RETENTION_DAYS_KEY)
+    if value is None:
+        db.set_setting(db_path, SETTINGS_RETENTION_DAYS_KEY, str(DEFAULT_RETENTION_DAYS))
+        return DEFAULT_RETENTION_DAYS
+    try:
+        retention_days = int(value)
+    except ValueError:
+        retention_days = DEFAULT_RETENTION_DAYS
+    if retention_days < 1:
+        retention_days = DEFAULT_RETENTION_DAYS
+    if str(retention_days) != value:
+        db.set_setting(db_path, SETTINGS_RETENTION_DAYS_KEY, str(retention_days))
+    return retention_days

@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from email import policy
+from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TypedDict
 from uuid import uuid4
 
 from quail import db
@@ -20,6 +22,13 @@ from quail.settings import get_settings
 LOGGER = logging.getLogger(__name__)
 DEFAULT_ALLOWED_MIME_TYPES = ("application/pdf",)
 SETTINGS_ALLOWED_MIME_KEY = "allowed_attachment_mime_types"
+
+
+class AttachmentRecord(TypedDict):
+    filename: str
+    stored_path: str
+    content_type: str
+    size_bytes: int
 
 
 def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
@@ -41,20 +50,50 @@ def _allowed_mime_types(db_path: Path) -> set[str]:
     return {item.strip().lower() for item in value.split(",") if item.strip()}
 
 
-def _message_has_disallowed_attachments(raw_bytes: bytes, allowed_types: set[str]) -> bool:
-    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+def _sanitize_filename(filename: str | None) -> str:
+    if not filename:
+        filename = "attachment"
+    cleaned = filename.replace("\x00", "").replace("\\", "/")
+    cleaned = Path(cleaned).name
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", cleaned)
+    cleaned = cleaned.strip("._")
+    return cleaned or "attachment"
+
+
+def _collect_attachments(
+    message: Message,
+    allowed_types: set[str],
+    attachment_dir: Path,
+) -> tuple[list[AttachmentRecord], bool]:
+    attachment_dir.mkdir(parents=True, exist_ok=True)
+    attachments: list[AttachmentRecord] = []
+    has_disallowed = False
     for part in message.walk():
         filename = part.get_filename()
         disposition = part.get_content_disposition()
-        if disposition == "attachment" or filename:
-            content_type = part.get_content_type().lower()
-            if content_type not in allowed_types:
-                return True
-    return False
+        if disposition != "attachment" and not filename:
+            continue
+        content_type = part.get_content_type().lower()
+        if content_type not in allowed_types:
+            has_disallowed = True
+            continue
+        payload = part.get_payload(decode=True) or b""
+        safe_name = _sanitize_filename(filename)
+        stored_name = f"{uuid4().hex}_{safe_name}"
+        stored_path = attachment_dir / stored_name
+        stored_path.write_bytes(payload)
+        attachments.append(
+            {
+                "filename": safe_name,
+                "stored_path": str(stored_path),
+                "content_type": content_type,
+                "size_bytes": len(payload),
+            }
+        )
+    return attachments, has_disallowed
 
 
-def _extract_metadata(raw_bytes: bytes) -> dict[str, str | None]:
-    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+def _extract_metadata(message: Message) -> dict[str, str | None]:
     return {
         "from_addr": message.get("From"),
         "subject": message.get("Subject"),
@@ -76,13 +115,18 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
     settings = get_settings()
     db.init_db(settings.db_path)
 
+    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     eml_path = _write_eml(raw_bytes, settings.eml_dir)
-    metadata = _extract_metadata(raw_bytes)
+    metadata = _extract_metadata(message)
     allowed_types = _allowed_mime_types(settings.db_path)
-    quarantined = _message_has_disallowed_attachments(raw_bytes, allowed_types)
+    attachments, quarantined = _collect_attachments(
+        message,
+        allowed_types,
+        settings.attachment_dir,
+    )
 
     with db.get_connection(settings.db_path) as conn:
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO messages (
                 received_at,
@@ -108,6 +152,29 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
                 1 if quarantined else 0,
             ),
         )
+        message_id = cursor.lastrowid
+        if attachments:
+            conn.executemany(
+                """
+                INSERT INTO attachments (
+                    message_id,
+                    filename,
+                    stored_path,
+                    content_type,
+                    size_bytes
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        message_id,
+                        attachment["filename"],
+                        attachment["stored_path"],
+                        attachment["content_type"],
+                        attachment["size_bytes"],
+                    )
+                    for attachment in attachments
+                ],
+            )
         conn.commit()
 
     if quarantined:
