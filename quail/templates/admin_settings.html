@@ -4,6 +4,9 @@
 {% if request.query_params.get("updated") %}
 <p>Settings updated.</p>
 {% endif %}
+{% if request.query_params.get("cleared") %}
+<p>All messages deleted.</p>
+{% endif %}
 {% if request.query_params.get("error") == "retention" %}
 <p>Retention must be a positive number.</p>
 {% endif %}
@@ -25,6 +28,21 @@
     <input id="admin_pin" name="admin_pin" type="password" />
   </div>
   <button type="submit">Save settings</button>
+</form>
+
+<h2>Storage usage</h2>
+<ul>
+  <li>Total messages: {{ message_count }}</li>
+  <li>Email storage: {{ message_bytes }}</li>
+  <li>Attachment storage: {{ attachment_bytes }}</li>
+  <li>Total storage: {{ total_bytes }}</li>
+</ul>
+
+<h2>Danger zone</h2>
+<form method="post" action="/admin/messages/clear">
+  <button type="submit" onclick="return confirm('Delete all messages and attachments?')">
+    Delete all messages
+  </button>
 </form>
 <p><a href="/inbox">Back to inbox</a></p>
 {% endblock %}

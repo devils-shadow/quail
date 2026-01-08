@@ -155,6 +155,41 @@ def _normalize_mime_list(value: str) -> str:
     return ",".join(items)
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _to_like_pattern(value: str) -> str:
+    return _escape_like(value).replace("*", "%")
+
+
+def _format_bytes(size_bytes: int) -> str:
+    if size_bytes < 0:
+        size_bytes = 0
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(size_bytes)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+        value /= 1024
+    return f"{int(size_bytes)} B"
+
+
+def _get_storage_stats(db_path: Path) -> dict[str, int]:
+    with db.get_connection(db_path) as conn:
+        message_row = conn.execute(
+            "SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes), 0) AS total FROM messages"
+        ).fetchone()
+        attachment_row = conn.execute(
+            "SELECT COALESCE(SUM(size_bytes), 0) AS total FROM attachments"
+        ).fetchone()
+    return {
+        "message_count": int(message_row["count"] or 0),
+        "message_bytes": int(message_row["total"] or 0),
+        "attachment_bytes": int(attachment_row["total"] or 0),
+    }
+
+
 def _iter_messages(
     db_path: Path, include_quarantined: bool, inbox_filter: str | None
 ) -> Iterable[dict[str, str]]:
@@ -170,8 +205,12 @@ def _iter_messages(
     if not include_quarantined:
         conditions.append("quarantined = 0")
     if inbox_filter:
-        conditions.append("envelope_rcpt = ?")
-        params.append(inbox_filter)
+        if "*" in inbox_filter:
+            conditions.append("envelope_rcpt LIKE ? ESCAPE '\\'")
+            params.append(_to_like_pattern(inbox_filter))
+        else:
+            conditions.append("envelope_rcpt = ?")
+            params.append(inbox_filter)
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.append(MAX_LIST_ROWS)
     with db.get_connection(db_path) as conn:
@@ -250,6 +289,19 @@ def _delete_message(settings_db_path: Path, message_id: int) -> None:
     with db.get_connection(settings_db_path) as conn:
         conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
         conn.commit()
+
+
+def _delete_all_messages(settings_db_path: Path) -> int:
+    with db.get_connection(settings_db_path) as conn:
+        attachments = conn.execute("SELECT stored_path FROM attachments").fetchall()
+        messages = conn.execute("SELECT eml_path FROM messages").fetchall()
+        conn.execute("DELETE FROM messages")
+        conn.commit()
+    for attachment in attachments:
+        _delete_path(Path(attachment["stored_path"]))
+    for message in messages:
+        _delete_path(Path(message["eml_path"]))
+    return len(messages)
 
 
 def _parse_message_body(
@@ -408,6 +460,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
         return RedirectResponse(url="/admin/unlock", status_code=303)
     settings = get_settings()
     _log_admin_action(settings.db_path, "admin_settings_view", request)
+    storage_stats = _get_storage_stats(settings.db_path)
     context = {
         "request": request,
         "allowed_mime_types": db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
@@ -415,6 +468,12 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
         or DEFAULT_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
+        "message_count": storage_stats["message_count"],
+        "message_bytes": _format_bytes(storage_stats["message_bytes"]),
+        "attachment_bytes": _format_bytes(storage_stats["attachment_bytes"]),
+        "total_bytes": _format_bytes(
+            storage_stats["message_bytes"] + storage_stats["attachment_bytes"]
+        ),
     }
     return templates.TemplateResponse("admin_settings.html", context)
 
@@ -449,3 +508,13 @@ async def admin_settings_post(
         _log_admin_action(settings.db_path, "admin_pin_updated", request)
     _log_admin_action(settings.db_path, "admin_settings_updated", request)
     return RedirectResponse(url="/admin/settings?updated=1", status_code=HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/messages/clear")
+async def admin_clear_messages(request: Request) -> RedirectResponse:
+    if not _is_admin(request):
+        return RedirectResponse(url="/admin/unlock", status_code=303)
+    settings = get_settings()
+    deleted_count = _delete_all_messages(settings.db_path)
+    _log_admin_action(settings.db_path, f"admin_messages_cleared:{deleted_count}", request)
+    return RedirectResponse(url="/admin/settings?cleared=1", status_code=HTTP_303_SEE_OTHER)

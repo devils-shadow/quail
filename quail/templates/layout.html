@@ -171,6 +171,9 @@
         border-radius: 8px;
         font-weight: 600;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .button.secondary {
@@ -185,6 +188,16 @@
         align-items: center;
         justify-content: center;
         padding: 0;
+      }
+
+      .button.square {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+      }
+
+      .row-hidden {
+        display: none;
       }
 
       .card {
@@ -356,7 +369,7 @@
 
       const readRecent = () => {
         try {
-          const raw = window.localStorage.getItem(storageKey);
+          const raw = window.sessionStorage.getItem(storageKey);
           return raw ? JSON.parse(raw) : [];
         } catch (error) {
           return [];
@@ -365,7 +378,7 @@
 
       const writeRecent = (items) => {
         try {
-          window.localStorage.setItem(storageKey, JSON.stringify(items));
+          window.sessionStorage.setItem(storageKey, JSON.stringify(items));
         } catch (error) {
           // Ignore storage errors.
         }
