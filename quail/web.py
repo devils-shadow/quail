@@ -5,6 +5,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import secrets
 
+from pathlib import Path
+
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+from starlette.status import HTTP_303_SEE_OTHER
+
+from quail import db
+from quail.ingest import DEFAULT_ALLOWED_MIME_TYPES, SETTINGS_ALLOWED_MIME_KEY
+from quail.settings import get_settings
+
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -21,6 +32,25 @@ _ADMIN_SESSION_COOKIE = "quail_admin_session"
 _ADMIN_SESSION_TTL = timedelta(minutes=20)
 _ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
 _ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+from quail.settings import SETTINGS_RETENTION_DAYS_KEY, get_retention_days, get_settings
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+app = FastAPI(title="Quail")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def _is_admin(request: Request) -> bool:
+    if hasattr(request.state, "is_admin"):
+        return bool(request.state.is_admin)
+    # TODO: implement admin PIN session handling.
+    return False
+
+
+def _normalize_mime_list(value: str) -> str:
+    items = [item.strip().lower() for item in value.split(",") if item.strip()]
+    return ",".join(items)
 
 
 @app.on_event("startup")
@@ -120,6 +150,73 @@ def _require_admin_session(request: Request) -> bool:
         return verify_pin(token, token_hash)
     except Exception:
         return False
+@app.get("/admin/settings", response_class=HTMLResponse)
+async def admin_settings(request: Request) -> HTMLResponse:
+    settings = get_settings()
+    retention_days = get_retention_days(settings.db_path)
+    return templates.TemplateResponse(
+        request,
+        "admin_settings.html",
+        {"retention_days": retention_days, "error": None},
+    )
+
+
+@app.post("/admin/settings", response_class=HTMLResponse)
+async def admin_settings_update(
+    request: Request, retention_days: int = Form(..., ge=1)
+) -> HTMLResponse:
+    settings = get_settings()
+    # TODO: Require admin PIN session before updating settings.
+    if retention_days < 1:
+        return templates.TemplateResponse(
+            request,
+            "admin_settings.html",
+            {"retention_days": retention_days, "error": "Retention must be at least 1 day."},
+            status_code=400,
+        )
+    db.set_setting(settings.db_path, SETTINGS_RETENTION_DAYS_KEY, str(retention_days))
+    return RedirectResponse(url="/admin/settings", status_code=303)
+@app.get("/")
+async def inbox(request: Request) -> object:
+    settings = get_settings()
+    include_quarantined = _is_admin(request)
+    messages = list(db.list_messages(settings.db_path, include_quarantined))
+    return templates.TemplateResponse(
+        "inbox.html",
+        {"request": request, "messages": messages, "is_admin": include_quarantined},
+    )
+
+
+@app.get("/admin/settings")
+async def admin_settings(request: Request) -> object:
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    settings = get_settings()
+    allowed = db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
+    if not allowed:
+        allowed = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
+    return templates.TemplateResponse(
+        "admin_settings.html",
+        {
+            "request": request,
+            "allowed_attachment_mime_types": allowed,
+        },
+    )
+
+
+@app.post("/admin/settings")
+async def update_admin_settings(
+    request: Request,
+    allowed_attachment_mime_types: str = Form(""),
+) -> object:
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    settings = get_settings()
+    normalized = _normalize_mime_list(allowed_attachment_mime_types)
+    if not normalized:
+        normalized = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
+    db.set_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY, normalized)
+    return RedirectResponse("/admin/settings", status_code=HTTP_303_SEE_OTHER)
 
 
 @app.get("/healthz")

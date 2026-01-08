@@ -23,6 +23,17 @@ SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        stored_path TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -116,3 +127,27 @@ def clear_rate_limit_state(db_path: Path, source_ip: str) -> None:
     with get_connection(db_path) as conn:
         conn.execute("DELETE FROM admin_rate_limits WHERE source_ip = ?", (source_ip,))
         conn.commit()
+def list_messages(db_path: Path, include_quarantined: bool) -> Iterable[sqlite3.Row]:
+    query = """
+        SELECT
+            id,
+            received_at,
+            envelope_rcpt,
+            from_addr,
+            subject,
+            date,
+            message_id,
+            size_bytes,
+            eml_path,
+            quarantined
+        FROM messages
+    """
+    params: tuple[()] | tuple[int]
+    if include_quarantined:
+        params = ()
+    else:
+        query += " WHERE quarantined = ?"
+        params = (0,)
+    query += " ORDER BY received_at DESC"
+    with get_connection(db_path) as conn:
+        yield from conn.execute(query, params)
