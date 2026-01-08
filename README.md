@@ -13,6 +13,8 @@ retention purge job, and install/upgrade automation are stubbed with TODOs.
 
 Postfix should pipe messages to `scripts/quail-ingest`, which runs the ingest
 module and stores raw `.eml` files plus metadata in SQLite.
+Oversize messages are rejected at SMTP via Postfix and dropped by the ingest
+pipeline when they exceed the configured maximum size.
 
 ## Configuration
 

@@ -126,11 +126,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     settings = get_settings()
     max_bytes = settings.max_message_size_mb * 1024 * 1024
     if len(raw_bytes) > max_bytes:
-        LOGGER.warning(
-            "Message size %s exceeds configured max %s MB.",
+        LOGGER.error(
+            "Message size %s exceeds configured max %s MB; dropping.",
             len(raw_bytes),
             settings.max_message_size_mb,
         )
+        return 0
 
     envelope_rcpt = args.envelope_rcpt or "unknown"
     ingest(raw_bytes, envelope_rcpt)
