@@ -25,21 +25,23 @@ from quail.settings import get_settings
 ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
 ALLOW_HTML_KEY = "allow_html"
-DEFAULT_ALLOWED_MIME_TYPES_STR = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
+DEFAULT_ALLOWED_MIME_TYPES_VALUE = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
 DEFAULT_RETENTION_DAYS = "30"
 DEFAULT_ALLOW_HTML = "false"
+ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
-ADMIN_COOKIE_NAME = "quail_admin_session"
-MAX_LIST_ROWS = 200
 ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
 ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+MAX_LIST_ROWS = 200
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 app = FastAPI(title="Quail")
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -53,11 +55,17 @@ def _get_client_ip(request: Request) -> str:
 
 def _init_settings(settings_path: Path) -> None:
     if db.get_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY) is None:
-        db.set_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_STR)
+        db.set_setting(
+            settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_VALUE
+        )
     if db.get_setting(settings_path, RETENTION_DAYS_KEY) is None:
         db.set_setting(settings_path, RETENTION_DAYS_KEY, DEFAULT_RETENTION_DAYS)
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
+
+
+def _get_admin_pin_hash(settings_db_path: Path) -> str | None:
+    return db.get_setting(settings_db_path, ADMIN_PIN_HASH_KEY)
 
 
 def _get_session_state(settings_db_path: Path) -> tuple[str | None, datetime | None]:
@@ -118,7 +126,7 @@ def _reset_rate_limit(settings_db_path: Path, source_ip: str) -> None:
     db.clear_rate_limit_state(settings_db_path, source_ip)
 
 
-def _validate_admin_session(request: Request) -> bool:
+def _is_admin(request: Request) -> bool:
     settings = get_settings()
     token_hash, expires_at = _get_session_state(settings.db_path)
     if not token_hash or not expires_at:
@@ -126,7 +134,7 @@ def _validate_admin_session(request: Request) -> bool:
     if expires_at < _now():
         _clear_session_state(settings.db_path)
         return False
-    token = request.cookies.get(ADMIN_COOKIE_NAME)
+    token = request.cookies.get(ADMIN_SESSION_COOKIE)
     if not token:
         return False
     try:
@@ -135,18 +143,78 @@ def _validate_admin_session(request: Request) -> bool:
         return False
 
 
-def _is_admin(request: Request) -> bool:
-    return _validate_admin_session(request)
-
-
-def _require_admin(request: Request) -> None:
-    if not _validate_admin_session(request):
-        raise HTTPException(status_code=403, detail="Admin access required.")
+def _log_admin_action(db_path: Path, action: str, request: Request) -> None:
+    db.log_admin_action(db_path, action, _get_client_ip(request), _now().isoformat())
 
 
 def _normalize_mime_list(value: str) -> str:
     items = [item.strip().lower() for item in value.split(",") if item.strip()]
     return ",".join(items)
+
+
+def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[str, str]]:
+    query = """
+        SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
+        FROM messages
+        {where_clause}
+        ORDER BY received_at DESC
+        LIMIT ?
+    """
+    where_clause = "" if include_quarantined else "WHERE quarantined = 0"
+    with db.get_connection(db_path) as conn:
+        rows = conn.execute(query.format(where_clause=where_clause), (MAX_LIST_ROWS,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _get_message(db_path: Path, message_id: int) -> dict[str, str]:
+    with db.get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id, received_at, envelope_rcpt, from_addr, subject, date, message_id,
+                   size_bytes, eml_path, quarantined
+            FROM messages
+            WHERE id = ?
+            """,
+            (message_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    return dict(row)
+
+
+def _parse_message_body(eml_path: Path) -> tuple[str, list[dict[str, str]]]:
+    raw_bytes = eml_path.read_bytes()
+    message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+    body = ""
+    attachments: list[dict[str, str]] = []
+    for part in message.walk():
+        disposition = part.get_content_disposition()
+        filename = part.get_filename()
+        content_type = part.get_content_type()
+        payload = part.get_payload(decode=True)
+        size = len(payload) if payload else 0
+        if disposition == "attachment" or filename:
+            attachments.append(
+                {
+                    "filename": filename or "unnamed",
+                    "content_type": content_type,
+                    "size": str(size),
+                }
+            )
+            continue
+        if not body and part.get_content_type() == "text/plain":
+            body = part.get_content()
+    if not body:
+        body = "(No plaintext body found.)"
+    return body, attachments
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    configure_logging()
+    settings = get_settings()
+    db.init_db(settings.db_path)
+    _init_settings(settings.db_path)
 
 
 def _iter_messages(db_path: Path, include_quarantined: bool) -> Iterable[dict[str, str]]:
@@ -255,14 +323,12 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
 @app.get("/admin/unlock", response_class=HTMLResponse)
 async def admin_unlock(request: Request) -> HTMLResponse:
     settings = get_settings()
-    if _is_admin(request):
-        return RedirectResponse(url="/admin/settings", status_code=HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(
         "admin_unlock.html",
         {
             "request": request,
             "error": request.query_params.get("error"),
-            "pin_configured": bool(db.get_setting(settings.db_path, ADMIN_PIN_HASH_KEY)),
+            "pin_configured": bool(_get_admin_pin_hash(settings.db_path)),
         },
     )
 
@@ -273,35 +339,25 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
     source_ip = _get_client_ip(request)
     now = _now()
     if _is_rate_limited(settings.db_path, source_ip, now):
-        return RedirectResponse(
-            url="/admin/unlock?error=rate_limited", status_code=HTTP_303_SEE_OTHER
-        )
-    stored_hash = db.get_setting(settings.db_path, ADMIN_PIN_HASH_KEY)
-    if not stored_hash:
-        return templates.TemplateResponse(
-            "admin_unlock.html",
-            {
-                "request": request,
-                "error": "Admin PIN not configured. TODO: set admin PIN in settings.",
-                "pin_configured": False,
-            },
-            status_code=400,
-        )
-    if not verify_pin(pin, stored_hash):
+        return RedirectResponse(url="/admin/unlock?error=rate_limited", status_code=303)
+
+    stored_hash = _get_admin_pin_hash(settings.db_path)
+    if stored_hash is None:
+        db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(pin))
+        _log_admin_action(settings.db_path, "admin_pin_initialized", request)
+    elif not verify_pin(pin, stored_hash):
         _record_rate_limit_failure(settings.db_path, source_ip, now)
-        return RedirectResponse(
-            url="/admin/unlock?error=invalid", status_code=HTTP_303_SEE_OTHER
-        )
+        return RedirectResponse(url="/admin/unlock?error=invalid", status_code=303)
 
     _reset_rate_limit(settings.db_path, source_ip)
     token = secrets.token_urlsafe(32)
     token_hash = hash_pin(token)
     expires_at = now + ADMIN_SESSION_TTL
     _set_session_state(settings.db_path, token_hash, expires_at)
-    db.log_admin_action(settings.db_path, "admin_unlock", source_ip, now.isoformat())
-    response = RedirectResponse(url="/admin/settings", status_code=HTTP_303_SEE_OTHER)
+    _log_admin_action(settings.db_path, "admin_unlock", request)
+    response = RedirectResponse(url="/admin/settings", status_code=303)
     response.set_cookie(
-        ADMIN_COOKIE_NAME,
+        ADMIN_SESSION_COOKIE,
         token,
         max_age=int(ADMIN_SESSION_TTL.total_seconds()),
         httponly=True,
@@ -312,12 +368,14 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
 
 @app.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings(request: Request) -> HTMLResponse:
-    _require_admin(request)
+    if not _is_admin(request):
+        return RedirectResponse(url="/admin/unlock", status_code=303)
     settings = get_settings()
+    _log_admin_action(settings.db_path, "admin_settings_view", request)
     context = {
         "request": request,
         "allowed_mime_types": db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
-        or DEFAULT_ALLOWED_MIME_TYPES_STR,
+        or DEFAULT_ALLOWED_MIME_TYPES_VALUE,
         "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
         or DEFAULT_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
@@ -328,15 +386,15 @@ async def admin_settings(request: Request) -> HTMLResponse:
 @app.post("/admin/settings")
 async def admin_settings_post(
     request: Request,
-    allowed_mime_types: str = Form(...),
-    retention_days: str = Form(...),
+    allowed_mime_types: str = Form(""),
+    retention_days: str = Form(""),
     allow_html: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
-    _require_admin(request)
+    if not _is_admin(request):
+        return RedirectResponse(url="/admin/unlock", status_code=303)
+
     settings = get_settings()
-    source_ip = _get_client_ip(request)
-    now = _now()
     try:
         retention_value = int(retention_days)
         if retention_value <= 0:
@@ -346,19 +404,12 @@ async def admin_settings_post(
 
     normalized_mime_types = _normalize_mime_list(allowed_mime_types)
     if not normalized_mime_types:
-        normalized_mime_types = DEFAULT_ALLOWED_MIME_TYPES_STR
+        normalized_mime_types = DEFAULT_ALLOWED_MIME_TYPES_VALUE
     db.set_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY, normalized_mime_types)
     db.set_setting(settings.db_path, RETENTION_DAYS_KEY, str(retention_value))
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
-
     if admin_pin:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
-        db.log_admin_action(settings.db_path, "admin_pin_updated", source_ip, now.isoformat())
-
-    db.log_admin_action(settings.db_path, "admin_settings_updated", source_ip, now.isoformat())
+        _log_admin_action(settings.db_path, "admin_pin_updated", request)
+    _log_admin_action(settings.db_path, "admin_settings_updated", request)
     return RedirectResponse(url="/admin/settings?updated=1", status_code=HTTP_303_SEE_OTHER)
-
-
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
