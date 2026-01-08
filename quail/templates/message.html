@@ -22,6 +22,11 @@
   <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
   {% endif %}
 </dl>
+{% if is_admin %}
+<form method="post" action="/admin/message/{{ message.id }}/delete">
+  <button type="submit">Delete message</button>
+</form>
+{% endif %}
 {% if allow_html and html_body %}
 <h2>Body (sanitized HTML)</h2>
 <div class="message-html">{{ html_body | safe }}</div>
