@@ -21,3 +21,10 @@ alongside each message.
 
 Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
 needed.
+
+## Admin access
+
+Admin actions are gated by a shared PIN stored as a hash in the SQLite settings
+table (`admin_pin_hash`). Session unlocks are short-lived and require the PIN
+again after expiration. TODO: provide a supported setup flow for the initial
+PIN.
