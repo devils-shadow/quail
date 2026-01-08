@@ -1,5 +1,19 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Admin Settings</h1>
-<p>TODO: settings form.</p>
+{% if error %}
+  <p style="color: red;">{{ error }}</p>
+{% endif %}
+<form method="post">
+  <label for="retention_days">Retention days</label>
+  <input
+    id="retention_days"
+    name="retention_days"
+    type="number"
+    min="1"
+    required
+    value="{{ retention_days }}"
+  />
+  <button type="submit">Save</button>
+</form>
 {% endblock %}
