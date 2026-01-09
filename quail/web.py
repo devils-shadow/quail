@@ -183,6 +183,8 @@ def _normalize_domain(value: str | None) -> str | None:
     if not value:
         return None
     normalized = value.strip().lower()
+    if not normalized or "@" in normalized or any(char.isspace() for char in normalized):
+        return None
     return normalized or None
 
 
@@ -229,7 +231,10 @@ def _normalize_rule_fields(
 ) -> tuple[dict[str, object] | None, RedirectResponse | JSONResponse | None]:
     normalized_domain = _normalize_domain(domain) if domain is not None else None
     if domain is not None and not normalized_domain:
-        return None, _rule_error_response(request, domain, "Domain is required.")
+        message = "Domain is required."
+        if domain.strip():
+            message = "Invalid domain."
+        return None, _rule_error_response(request, domain, message)
     normalized_rule_type = rule_type.strip().upper()
     if normalized_rule_type not in RULE_TYPES:
         return None, _rule_error_response(request, normalized_domain, "Invalid rule type.")
@@ -248,9 +253,13 @@ def _normalize_rule_fields(
     try:
         priority_value = int(priority)
     except ValueError:
-        return None, _rule_error_response(request, normalized_domain, "Priority must be an integer.")
+        return None, _rule_error_response(
+            request, normalized_domain, "Priority must be an integer."
+        )
     if priority_value < 0:
-        return None, _rule_error_response(request, normalized_domain, "Priority must be non-negative.")
+        return None, _rule_error_response(
+            request, normalized_domain, "Priority must be non-negative."
+        )
     return (
         {
             "domain": normalized_domain,
@@ -262,6 +271,7 @@ def _normalize_rule_fields(
         },
         None,
     )
+
 
 def _wants_json(request: Request) -> bool:
     accept = request.headers.get("accept", "")
@@ -730,11 +740,13 @@ async def admin_rules(request: Request, domain: str | None = None) -> JSONRespon
         return redirect
     normalized_domain = _normalize_domain(domain)
     if not normalized_domain:
-        raise HTTPException(status_code=400, detail="Domain is required.")
+        message = "Domain is required."
+        if domain and domain.strip():
+            message = "Invalid domain."
+        raise HTTPException(status_code=400, detail=message)
     settings = get_settings()
     rules = [
-        _serialize_rule(row)
-        for row in db.list_address_rules(settings.db_path, normalized_domain)
+        _serialize_rule(row) for row in db.list_address_rules(settings.db_path, normalized_domain)
     ]
     return JSONResponse({"domain": normalized_domain, "rules": rules})
 
