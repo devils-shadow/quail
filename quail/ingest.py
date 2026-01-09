@@ -225,7 +225,9 @@ def _normalize_status(action: str | None) -> str:
     return normalized
 
 
-def determine_ingest_decision(db_path: Path, envelope_rcpt: str, message: Message) -> IngestDecision:
+def determine_ingest_decision(
+    db_path: Path, envelope_rcpt: str, message: Message
+) -> IngestDecision:
     _, domain = _split_envelope_rcpt(envelope_rcpt)
     decision_meta: dict[str, str | int | None] = {
         "rule_id": None,
@@ -247,7 +249,9 @@ def determine_ingest_decision(db_path: Path, envelope_rcpt: str, message: Messag
     if mode == "PAUSED":
         status = "QUARANTINE" if default_action == "QUARANTINE" else "DROP"
         reason = f"Domain policy paused ({status})"
-        return IngestDecision(status=status, quarantine_reason=reason, ingest_decision_meta=decision_meta)
+        return IngestDecision(
+            status=status, quarantine_reason=reason, ingest_decision_meta=decision_meta
+        )
 
     for rule in rules:
         match_field = rule.get("match_field", "")
@@ -276,7 +280,9 @@ def determine_ingest_decision(db_path: Path, envelope_rcpt: str, message: Messag
                 }
             )
             reason = f"Rule {rule.get('id')} {rule_type} matched {match_field}"
-            return IngestDecision(status=action, quarantine_reason=reason, ingest_decision_meta=decision_meta)
+            return IngestDecision(
+                status=action, quarantine_reason=reason, ingest_decision_meta=decision_meta
+            )
 
     if mode == "RESTRICTED":
         return IngestDecision(

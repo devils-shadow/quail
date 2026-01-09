@@ -105,9 +105,7 @@ def test_paused_policy_routes_to_drop_or_quarantine(tmp_path, monkeypatch):
     assert decision.status == "DROP"
 
     _insert_domain_policy(db_path, "paused.example", "PAUSED", "QUARANTINE")
-    decision = ingest.determine_ingest_decision(
-        db_path, "user@paused.example", _build_message()
-    )
+    decision = ingest.determine_ingest_decision(db_path, "user@paused.example", _build_message())
     assert decision.status == "QUARANTINE"
 
 
