@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
+import sqlite3
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from email import policy
 from email.message import Message
 from email.parser import BytesParser
+from email.utils import getaddresses
 from pathlib import Path
 from typing import Iterable, TypedDict
 from uuid import uuid4
@@ -22,6 +26,15 @@ from quail.settings import get_settings
 LOGGER = logging.getLogger(__name__)
 DEFAULT_ALLOWED_MIME_TYPES = ("application/pdf",)
 SETTINGS_ALLOWED_MIME_KEY = "allowed_attachment_mime_types"
+DECISION_STATUSES = ("INBOX", "QUARANTINE", "DROP")
+DOMAIN_MODES = ("OPEN", "RESTRICTED", "PAUSED")
+RULE_TYPES = ("ALLOW", "BLOCK")
+MATCH_FIELDS = ("RCPT_LOCALPART", "MAIL_FROM", "FROM_DOMAIN", "SUBJECT")
+RULE_ALLOW_DEFAULT = "INBOX"
+RULE_BLOCK_DEFAULT = "QUARANTINE"
+DOMAIN_DEFAULT_MODE = "OPEN"
+DOMAIN_DEFAULT_ACTION = "INBOX"
+REGEX_CACHE: dict[str, re.Pattern[str]] = {}
 
 
 class AttachmentRecord(TypedDict):
@@ -29,6 +42,13 @@ class AttachmentRecord(TypedDict):
     stored_path: str
     content_type: str
     size_bytes: int
+
+
+@dataclass(frozen=True)
+class IngestDecision:
+    status: str
+    quarantine_reason: str | None
+    ingest_decision_meta: dict[str, str | int | None]
 
 
 def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
@@ -102,6 +122,185 @@ def _extract_metadata(message: Message) -> dict[str, str | None]:
     }
 
 
+def _now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _split_envelope_rcpt(envelope_rcpt: str) -> tuple[str, str]:
+    localpart, _, domain = envelope_rcpt.partition("@")
+    return localpart, domain.lower()
+
+
+def _extract_primary_address(raw_value: str | None) -> str | None:
+    if not raw_value:
+        return None
+    addresses = getaddresses([raw_value])
+    for _, address in addresses:
+        if address:
+            return address
+    return None
+
+
+def _extract_domain(address: str | None) -> str | None:
+    if not address:
+        return None
+    _, _, domain = address.partition("@")
+    return domain.lower() if domain else None
+
+
+def _get_cached_regex(pattern: str) -> re.Pattern[str] | None:
+    compiled = REGEX_CACHE.get(pattern)
+    if compiled is not None:
+        return compiled
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        LOGGER.warning("Invalid regex pattern in address_rule: %s", pattern)
+        return None
+    REGEX_CACHE[pattern] = compiled
+    return compiled
+
+
+def _load_domain_policy(conn: sqlite3.Connection, domain: str) -> dict[str, str]:
+    row = conn.execute(
+        "SELECT id, domain, mode, default_action FROM domain_policy WHERE domain = ?",
+        (domain,),
+    ).fetchone()
+    if row:
+        return dict(row)
+    now = _now_iso()
+    conn.execute(
+        """
+        INSERT INTO domain_policy (domain, mode, default_action, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (domain, DOMAIN_DEFAULT_MODE, DOMAIN_DEFAULT_ACTION, now, now),
+    )
+    conn.commit()
+    return {
+        "domain": domain,
+        "mode": DOMAIN_DEFAULT_MODE,
+        "default_action": DOMAIN_DEFAULT_ACTION,
+    }
+
+
+def _load_address_rules(conn: sqlite3.Connection, domain: str) -> list[dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT id, domain, rule_type, match_field, pattern, priority, action, enabled
+        FROM address_rule
+        WHERE domain = ? AND enabled = 1
+        ORDER BY priority ASC, id ASC
+        """,
+        (domain,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _match_value(
+    match_field: str,
+    envelope_rcpt: str,
+    message: Message,
+) -> str:
+    localpart, _ = _split_envelope_rcpt(envelope_rcpt)
+    from_addr = _extract_primary_address(message.get("From"))
+    from_domain = _extract_domain(from_addr)
+    subject = message.get("Subject")
+    mapping = {
+        "RCPT_LOCALPART": localpart,
+        "MAIL_FROM": from_addr or "",
+        "FROM_DOMAIN": from_domain or "",
+        "SUBJECT": subject or "",
+    }
+    return mapping.get(match_field, "")
+
+
+def _normalize_status(action: str | None) -> str:
+    if not action:
+        return DOMAIN_DEFAULT_ACTION
+    normalized = action.upper()
+    if normalized not in DECISION_STATUSES:
+        LOGGER.warning("Unknown action %s in policy/rule; defaulting to INBOX", action)
+        return DOMAIN_DEFAULT_ACTION
+    return normalized
+
+
+def determine_ingest_decision(
+    db_path: Path, envelope_rcpt: str, message: Message
+) -> IngestDecision:
+    _, domain = _split_envelope_rcpt(envelope_rcpt)
+    decision_meta: dict[str, str | int | None] = {
+        "rule_id": None,
+        "rule_type": None,
+        "match_field": None,
+        "matched_value": None,
+        "timestamp": _now_iso(),
+    }
+    with db.get_connection(db_path) as conn:
+        policy = _load_domain_policy(conn, domain)
+        rules = _load_address_rules(conn, domain)
+
+    mode = (policy.get("mode") or DOMAIN_DEFAULT_MODE).upper()
+    if mode not in DOMAIN_MODES:
+        LOGGER.warning("Unknown domain policy mode %s; defaulting to OPEN", mode)
+        mode = DOMAIN_DEFAULT_MODE
+    default_action = _normalize_status(policy.get("default_action"))
+
+    if mode == "PAUSED":
+        status = "QUARANTINE" if default_action == "QUARANTINE" else "DROP"
+        reason = f"Domain policy paused ({status})"
+        return IngestDecision(
+            status=status, quarantine_reason=reason, ingest_decision_meta=decision_meta
+        )
+
+    for rule in rules:
+        match_field = rule.get("match_field", "")
+        if match_field not in MATCH_FIELDS:
+            continue
+        match_value = _match_value(match_field, envelope_rcpt, message)
+        compiled = _get_cached_regex(rule.get("pattern", ""))
+        if not compiled:
+            continue
+        if compiled.search(match_value):
+            rule_type = (rule.get("rule_type") or "").upper()
+            if rule_type not in RULE_TYPES:
+                LOGGER.warning("Unknown rule type %s for rule %s", rule_type, rule.get("id"))
+                continue
+            action = _normalize_status(rule.get("action"))
+            if rule_type == "ALLOW" and action == DOMAIN_DEFAULT_ACTION:
+                action = RULE_ALLOW_DEFAULT
+            if rule_type == "BLOCK" and action == DOMAIN_DEFAULT_ACTION:
+                action = RULE_BLOCK_DEFAULT
+            decision_meta.update(
+                {
+                    "rule_id": rule.get("id"),
+                    "rule_type": rule_type,
+                    "match_field": match_field,
+                    "matched_value": match_value,
+                }
+            )
+            reason = f"Rule {rule.get('id')} {rule_type} matched {match_field}"
+            return IngestDecision(
+                status=action, quarantine_reason=reason, ingest_decision_meta=decision_meta
+            )
+
+    if mode == "RESTRICTED":
+        return IngestDecision(
+            status="QUARANTINE",
+            quarantine_reason="Restricted domain without allow rule",
+            ingest_decision_meta=decision_meta,
+        )
+
+    reason = None
+    if default_action != "INBOX":
+        reason = f"Domain default action {default_action}"
+    return IngestDecision(
+        status=default_action,
+        quarantine_reason=reason,
+        ingest_decision_meta=decision_meta,
+    )
+
+
 def _write_eml(raw_bytes: bytes, eml_dir: Path) -> Path:
     eml_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -116,6 +315,7 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
     db.init_db(settings.db_path)
 
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+    decision = determine_ingest_decision(settings.db_path, envelope_rcpt, message)
     eml_path = _write_eml(raw_bytes, settings.eml_dir)
     metadata = _extract_metadata(message)
     allowed_types = _allowed_mime_types(settings.db_path)
@@ -124,6 +324,14 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
         allowed_types,
         settings.attachment_dir,
     )
+
+    status = decision.status
+    quarantine_reason = decision.quarantine_reason
+    decision_meta = decision.ingest_decision_meta
+    if quarantined:
+        status = "QUARANTINE"
+        quarantine_reason = "Disallowed attachment types"
+    is_quarantined = status != "INBOX"
 
     with db.get_connection(settings.db_path) as conn:
         cursor = conn.execute(
@@ -137,11 +345,14 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
                 message_id,
                 size_bytes,
                 eml_path,
-                quarantined
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                quarantined,
+                status,
+                quarantine_reason,
+                ingest_decision_meta
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                datetime.now(tz=timezone.utc).isoformat(),
+                _now_iso(),
                 envelope_rcpt,
                 metadata["from_addr"],
                 metadata["subject"],
@@ -149,7 +360,10 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
                 metadata["message_id"],
                 len(raw_bytes),
                 str(eml_path),
-                1 if quarantined else 0,
+                1 if is_quarantined else 0,
+                status,
+                quarantine_reason,
+                json.dumps(decision_meta),
             ),
         )
         message_id = cursor.lastrowid
@@ -177,8 +391,10 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
             )
         conn.commit()
 
-    if quarantined:
-        LOGGER.warning("Message quarantined due to disallowed attachment types.")
+    if status == "DROP":
+        LOGGER.warning("Message dropped by ingest policy for %s.", envelope_rcpt)
+    elif status == "QUARANTINE":
+        LOGGER.warning("Message quarantined for %s: %s", envelope_rcpt, quarantine_reason)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
