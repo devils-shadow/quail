@@ -30,7 +30,6 @@ def test_domain_policy_requires_admin_session(tmp_path, monkeypatch) -> None:
         response = client.get(
             "/admin/domain-policies",
             headers={"accept": "application/json"},
-            params={"admin_pin": "1234"},
         )
 
         assert response.status_code == 403
@@ -46,9 +45,8 @@ def test_domain_policy_create_and_list(tmp_path, monkeypatch) -> None:
                 "domain": "example.com",
                 "mode": "RESTRICTED",
                 "default_action": "QUARANTINE",
-                "admin_pin": "1234",
             },
-            headers={"accept": "application/json"},
+            headers={"accept": "application/json", "x-admin-pin": "1234"},
         )
         assert response.status_code == 200
         payload = response.json()
@@ -59,7 +57,6 @@ def test_domain_policy_create_and_list(tmp_path, monkeypatch) -> None:
         list_response = client.get(
             "/admin/domain-policies",
             headers={"accept": "application/json"},
-            params={"admin_pin": "1234"},
         )
         assert list_response.status_code == 200
         policies = list_response.json()["policies"]
@@ -77,8 +74,7 @@ def test_domain_policy_rejects_bad_pin(tmp_path, monkeypatch) -> None:
                 "domain": "example.com",
                 "mode": "OPEN",
                 "default_action": "INBOX",
-                "admin_pin": "9999",
             },
-            headers={"accept": "application/json"},
+            headers={"accept": "application/json", "x-admin-pin": "9999"},
         )
         assert response.status_code == 403

@@ -189,6 +189,13 @@ def _reject_admin_pin(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/admin/settings?domain_error=pin", status_code=303)
 
 
+def _get_admin_pin_from_request(request: Request, admin_pin: str | None = None) -> str | None:
+    header_pin = request.headers.get("x-admin-pin")
+    if header_pin:
+        return header_pin
+    return admin_pin
+
+
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -555,7 +562,8 @@ async def admin_domain_policies(request: Request, admin_pin: str | None = None) 
     if redirect:
         return redirect
     settings = get_settings()
-    if not _verify_admin_pin(settings.db_path, admin_pin):
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if resolved_pin and not _verify_admin_pin(settings.db_path, resolved_pin):
         return _reject_admin_pin(request)
     policies = [dict(row) for row in db.list_domain_policies(settings.db_path)]
     return JSONResponse({"policies": policies})
@@ -573,7 +581,8 @@ async def admin_domain_policies_post(
     if redirect:
         return redirect
     settings = get_settings()
-    if not _verify_admin_pin(settings.db_path, admin_pin):
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
         return _reject_admin_pin(request)
     normalized_domain = domain.strip().lower()
     if not normalized_domain or "@" in normalized_domain or " " in normalized_domain:
