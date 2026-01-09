@@ -18,6 +18,9 @@ Oversize messages are rejected at SMTP via Postfix and dropped by the ingest
 pipeline when they exceed the configured maximum size. Allowed attachments are
 extracted into the attachment directory, and attachment metadata is stored
 alongside each message.
+The ingest pipeline applies deterministic domain policies and address/content
+rules to mark messages as INBOX, QUARANTINE, or DROP while storing the decision
+metadata in SQLite.
 
 ## Configuration
 

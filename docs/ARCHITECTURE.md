@@ -12,7 +12,7 @@ A single Python **FastAPI** service provides both the ingest entrypoint and the 
 
 ## Ingest Pipeline
 
-The ingest entrypoint stores the full raw email as a `.eml` file and extracts metadata including recipient, from, subject, date, message‑ID and size【104907567664902†L60-L69】. Metadata is inserted into a SQLite database【104907567664902†L62-L70】. Attachments are allowed only for specific MIME types (default **PDF**), configurable via the admin UI【104907567664902†L71-L74】. Messages with disallowed attachments are quarantined and hidden from non‑admin users【104907567664902†L71-L78】.
+The ingest entrypoint stores the full raw email as a `.eml` file and extracts metadata including recipient, from, subject, date, message‑ID and size【104907567664902†L60-L69】. Metadata is inserted into a SQLite database【104907567664902†L62-L70】. Attachments are allowed only for specific MIME types (default **PDF**), configurable via the admin UI【104907567664902†L71-L74】. Messages with disallowed attachments are quarantined and hidden from non‑admin users【104907567664902†L71-L78】. The ingest pipeline applies deterministic domain policies and address/content rules to set each message status (INBOX, QUARANTINE, or DROP) and stores decision metadata alongside the message.
 
 ## Retention and Purge
 
