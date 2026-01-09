@@ -210,6 +210,192 @@ def upsert_domain_policy(
     return row
 
 
+def list_address_rules(db_path: Path, domain: str) -> list[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                created_at,
+                updated_at
+            FROM address_rule
+            WHERE domain = ?
+            ORDER BY priority ASC, id ASC
+            """,
+            (domain,),
+        ).fetchall()
+    return list(rows)
+
+
+def create_address_rule(
+    db_path: Path,
+    domain: str,
+    rule_type: str,
+    match_field: str,
+    pattern: str,
+    priority: int,
+    action: str,
+    enabled: int,
+    note: str | None,
+    now: str,
+) -> sqlite3.Row:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO address_rule (
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                now,
+                now,
+            ),
+        )
+        rule_id = cursor.lastrowid
+        row = conn.execute(
+            """
+            SELECT
+                id,
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                created_at,
+                updated_at
+            FROM address_rule
+            WHERE id = ?
+            """,
+            (rule_id,),
+        ).fetchone()
+        conn.commit()
+    if not row:
+        raise RuntimeError("Failed to create address rule.")
+    return row
+
+
+def get_address_rule(db_path: Path, rule_id: int) -> sqlite3.Row | None:
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT
+                id,
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                created_at,
+                updated_at
+            FROM address_rule
+            WHERE id = ?
+            """,
+            (rule_id,),
+        ).fetchone()
+
+
+def update_address_rule(
+    db_path: Path,
+    rule_id: int,
+    rule_type: str,
+    match_field: str,
+    pattern: str,
+    priority: int,
+    action: str,
+    enabled: int,
+    note: str | None,
+    now: str,
+) -> sqlite3.Row | None:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE address_rule
+            SET
+                rule_type = ?,
+                match_field = ?,
+                pattern = ?,
+                priority = ?,
+                action = ?,
+                enabled = ?,
+                note = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                now,
+                rule_id,
+            ),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            """
+            SELECT
+                id,
+                domain,
+                rule_type,
+                match_field,
+                pattern,
+                priority,
+                action,
+                enabled,
+                note,
+                created_at,
+                updated_at
+            FROM address_rule
+            WHERE id = ?
+            """,
+            (rule_id,),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def delete_address_rule(db_path: Path, rule_id: int) -> bool:
+    with get_connection(db_path) as conn:
+        cursor = conn.execute("DELETE FROM address_rule WHERE id = ?", (rule_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def list_messages(db_path: Path, include_quarantined: bool) -> Iterable[sqlite3.Row]:
     query = """
         SELECT
