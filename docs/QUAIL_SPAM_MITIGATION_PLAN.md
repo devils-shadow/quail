@@ -1,6 +1,9 @@
-# Actionable Plan for Implementing Quail Spam‑Mitigation Admin Features
+# Quail Spam Mitigation Plan (Admin Controls)
 
-This document converts the previously discussed implementation plan into a repository‑ready Markdown file. It is designed to be consumed directly by Codex or a human developer without additional context. It assumes the current Quail repository state as defined in `QUAIL_CODEX_CONTEXT.md` and the existing FastAPI + SQLite implementation.
+This document is a repository-ready plan for the spam-mitigation admin features previously
+scoped for Quail. It aligns with `QUAIL_CODEX_CONTEXT.md` and the existing FastAPI + SQLite
+implementation. It is intentionally specific, but does not add new requirements beyond the
+agreed scope.
 
 ---
 
@@ -11,29 +14,27 @@ These rules are mandatory and intentionally boring:
 - No external services, no SaaS, no paid dependencies
 - SQLite remains the only database
 - One operator, low volume, maintainability > cleverness
-- No spam “scoring” or ML classification
+- No spam scoring or ML classification
 - No outbound mail, no SMTP feedback loops
 - Prefer quarantine over drop, drop over rejection
 - Any ambiguity → safe default + explicit TODO
 
-This plan implements **only what is explicitly required** by the spam‑mitigation requirements. Optional Phase 2 items are excluded.
+Optional Phase 2 items are excluded; implement only what is documented here.
 
 ---
 
-## 1. Phase Breakdown Overview
+## 1. Phase Overview
 
-Implementation is intentionally phased to keep Codex focused and to allow safe checkpoints:
+Each phase should land as a working, testable system state:
 
 1. Database schema extensions
 2. Ingest decision pipeline
 3. Admin domain policy controls
-4. Address / content rule management
+4. Address/content rule management
 5. Quarantine view and actions
 6. Retention and purge extensions
 7. Metrics, logging, and audit
 8. Hardening and acceptance verification
-
-Each phase should result in a working system state.
 
 ---
 
@@ -47,9 +48,9 @@ Add the following tables via `db.py` schema migration logic (CREATE TABLE IF NOT
 
 - `id` INTEGER PRIMARY KEY
 - `domain` TEXT UNIQUE NOT NULL
-- `mode` TEXT NOT NULL  
+- `mode` TEXT NOT NULL
   Values: `OPEN`, `RESTRICTED`, `PAUSED`
-- `default_action` TEXT NOT NULL  
+- `default_action` TEXT NOT NULL
   Values: `INBOX`, `QUARANTINE`, `DROP`
 - `created_at` TEXT NOT NULL
 - `updated_at` TEXT NOT NULL
@@ -58,14 +59,13 @@ Add the following tables via `db.py` schema migration logic (CREATE TABLE IF NOT
 
 - `id` INTEGER PRIMARY KEY
 - `domain` TEXT NOT NULL
-- `rule_type` TEXT NOT NULL  
+- `rule_type` TEXT NOT NULL
   Values: `ALLOW`, `BLOCK`
-- `match_field` TEXT NOT NULL  
+- `match_field` TEXT NOT NULL
   Values: `RCPT_LOCALPART`, `MAIL_FROM`, `FROM_DOMAIN`, `SUBJECT`
-- `pattern` TEXT NOT NULL  
-  Stored as raw regex
+- `pattern` TEXT NOT NULL (stored as raw regex)
 - `priority` INTEGER NOT NULL
-- `action` TEXT NOT NULL  
+- `action` TEXT NOT NULL
   Values: `INBOX`, `QUARANTINE`, `DROP`
 - `enabled` INTEGER NOT NULL DEFAULT 1
 - `note` TEXT
@@ -80,7 +80,8 @@ Modify `messages` table:
 - Add `quarantine_reason` TEXT NULL
 - Add `ingest_decision_meta` TEXT NULL (JSON stored as TEXT)
 
-Do **not** remove the existing `quarantined` column yet. Treat it as legacy until migration is complete.
+Do **not** remove the existing `quarantined` column yet. Treat it as legacy until migration is
+complete.
 
 ---
 
@@ -88,32 +89,30 @@ Do **not** remove the existing `quarantined` column yet. Treat it as legacy unti
 
 ### 3.1 Decision Flow
 
-Implement a deterministic decision function inside `ingest.py`:
+Implement a deterministic decision function inside `ingest.py` in this order:
 
-Order of evaluation:
-
-1. Extract recipient domain from `envelope_rcpt`
-2. Load or create `domain_policy` (default: `OPEN`, `INBOX`)
-3. If domain mode is `PAUSED` → decision = `DROP` (or `QUARANTINE` if configured)
-4. Load enabled `address_rule` entries for the domain ordered by `priority ASC`
+1. Extract recipient domain from `envelope_rcpt`.
+2. Load or create `domain_policy` (default: `OPEN`, `INBOX`).
+3. If domain mode is `PAUSED` → decision = `DROP` (or `QUARANTINE` if configured).
+4. Load enabled `address_rule` entries for the domain ordered by `priority ASC`.
 5. First matching rule wins:
    - `ALLOW` → apply rule action (default `INBOX`)
    - `BLOCK` → apply rule action (default `QUARANTINE`)
-6. If domain mode is `RESTRICTED` and no `ALLOW` rule matched → `QUARANTINE`
-7. Otherwise → apply domain `default_action`
+6. If domain mode is `RESTRICTED` and no `ALLOW` rule matched → `QUARANTINE`.
+7. Otherwise → apply domain `default_action`.
 
 ### 3.2 Performance Constraints
 
-- Compile regexes once per process and cache them
-- Matching must be O(number of rules for domain)
-- No disk IO during decision phase
+- Compile regexes once per process and cache them.
+- Matching must be O(number of rules for domain).
+- No disk IO during decision phase.
 
 ### 3.3 Persistence
 
 Store on each message:
 
 - Final decision (`status`)
-- `quarantine_reason` (human‑readable)
+- `quarantine_reason` (human-readable)
 - `ingest_decision_meta` JSON:
   - rule_id
   - rule_type
@@ -127,7 +126,7 @@ Store on each message:
 
 ### 4.1 Backend Endpoints
 
-Add admin‑only endpoints:
+Add admin-only endpoints:
 
 - `GET /admin/domain-policies`
 - `POST /admin/domain-policies`
@@ -154,7 +153,7 @@ Changes apply only to new ingests.
 
 ---
 
-## 5. Phase 4 — Address / Content Rule Management
+## 5. Phase 4 — Address/Content Rule Management
 
 ### 5.1 Backend
 
@@ -173,9 +172,7 @@ Validation rules:
 
 ### 5.2 UI
 
-Admin Rules table:
-
-Columns:
+Admin rules table columns:
 
 - Enabled toggle
 - Type (ALLOW / BLOCK)
@@ -213,13 +210,11 @@ Endpoints:
 Restore behavior:
 
 - Change message `status` to `INBOX`
-- Do not re‑ingest or re‑parse message
+- Do not re-ingest or re-parse message
 
 ### 6.2 UI
 
-Admin‑only Quarantine view:
-
-List fields:
+Admin-only Quarantine view list fields:
 
 - Received timestamp
 - Recipient address
@@ -231,7 +226,7 @@ Filters:
 
 - Domain
 - Sender domain
-- Recipient local‑part
+- Recipient local-part
 - Date range
 
 Bulk actions:
@@ -249,7 +244,7 @@ Extend purge logic:
 
 - Global inbox retention (existing)
 - New quarantine retention (default 3 days)
-- Optional per‑domain override
+- Optional per-domain override
 
 Expired messages:
 
@@ -282,7 +277,7 @@ Ingest decision log (per message):
 - Message ID
 - Decision
 - Reason
-- Recipient domain/local‑part
+- Recipient domain/local-part
 - Sender domain
 - Source IP (if available)
 
@@ -326,4 +321,3 @@ When feeding this to Codex:
 - If unsure → stop and leave a TODO
 
 This file is the execution contract.
-
