@@ -13,12 +13,17 @@ from typing import Iterable
 import bleach
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.status import HTTP_303_SEE_OTHER
 
 from quail import db
-from quail.ingest import DEFAULT_ALLOWED_MIME_TYPES, SETTINGS_ALLOWED_MIME_KEY
+from quail.ingest import (
+    DECISION_STATUSES,
+    DEFAULT_ALLOWED_MIME_TYPES,
+    DOMAIN_MODES,
+    SETTINGS_ALLOWED_MIME_KEY,
+)
 from quail.logging_config import configure_logging
 from quail.security import hash_pin, verify_pin
 from quail.settings import get_settings
@@ -151,6 +156,44 @@ def _log_admin_action(db_path: Path, action: str, request: Request) -> None:
 def _normalize_mime_list(value: str) -> str:
     items = [item.strip().lower() for item in value.split(",") if item.strip()]
     return ",".join(items)
+
+
+def _wants_json(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    return "application/json" in accept or "application/*" in accept
+
+
+def _require_admin_session(request: Request) -> RedirectResponse | None:
+    if _is_admin(request):
+        return None
+    if _wants_json(request):
+        raise HTTPException(status_code=403, detail="Admin session required.")
+    return RedirectResponse(url="/admin/unlock", status_code=303)
+
+
+def _verify_admin_pin(db_path: Path, admin_pin: str | None) -> bool:
+    if not admin_pin:
+        return False
+    stored_hash = _get_admin_pin_hash(db_path)
+    if not stored_hash:
+        return False
+    try:
+        return verify_pin(admin_pin, stored_hash)
+    except (VerifyMismatchError, InvalidHash):
+        return False
+
+
+def _reject_admin_pin(request: Request) -> RedirectResponse:
+    if _wants_json(request):
+        raise HTTPException(status_code=403, detail="Admin PIN verification required.")
+    return RedirectResponse(url="/admin/settings?domain_error=pin", status_code=303)
+
+
+def _get_admin_pin_from_request(request: Request, admin_pin: str | None = None) -> str | None:
+    header_pin = request.headers.get("x-admin-pin")
+    if header_pin:
+        return header_pin
+    return admin_pin
 
 
 def _escape_like(value: str) -> str:
@@ -452,8 +495,9 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
 
 @app.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings(request: Request) -> HTMLResponse:
-    if not _is_admin(request):
-        return RedirectResponse(url="/admin/unlock", status_code=303)
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
     settings = get_settings()
     _log_admin_action(settings.db_path, "admin_settings_view", request)
     storage_stats = _get_storage_stats(settings.db_path)
@@ -470,6 +514,9 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "total_bytes": _format_bytes(
             storage_stats["message_bytes"] + storage_stats["attachment_bytes"]
         ),
+        "domain_policies": [dict(row) for row in db.list_domain_policies(settings.db_path)],
+        "domain_modes": DOMAIN_MODES,
+        "domain_actions": DECISION_STATUSES,
     }
     return templates.TemplateResponse("admin_settings.html", context)
 
@@ -482,8 +529,9 @@ async def admin_settings_post(
     allow_html: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
-    if not _is_admin(request):
-        return RedirectResponse(url="/admin/unlock", status_code=303)
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
 
     settings = get_settings()
     try:
@@ -506,6 +554,61 @@ async def admin_settings_post(
         _log_admin_action(settings.db_path, "admin_pin_updated", request)
     _log_admin_action(settings.db_path, "admin_settings_updated", request)
     return RedirectResponse(url="/admin/settings?updated=1", status_code=HTTP_303_SEE_OTHER)
+
+
+@app.get("/admin/domain-policies", response_class=JSONResponse)
+async def admin_domain_policies(request: Request, admin_pin: str | None = None) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if resolved_pin and not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    policies = [dict(row) for row in db.list_domain_policies(settings.db_path)]
+    return JSONResponse({"policies": policies})
+
+
+@app.post("/admin/domain-policies", response_class=JSONResponse)
+async def admin_domain_policies_post(
+    request: Request,
+    domain: str = Form(...),
+    mode: str = Form(...),
+    default_action: str = Form(...),
+    admin_pin: str | None = Form(None),
+) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    normalized_domain = domain.strip().lower()
+    if not normalized_domain or "@" in normalized_domain or " " in normalized_domain:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="Invalid domain.")
+        return RedirectResponse(url="/admin/settings?domain_error=domain", status_code=303)
+    normalized_mode = mode.strip().upper()
+    if normalized_mode not in DOMAIN_MODES:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="Invalid domain mode.")
+        return RedirectResponse(url="/admin/settings?domain_error=mode", status_code=303)
+    normalized_action = default_action.strip().upper()
+    if normalized_action not in DECISION_STATUSES:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="Invalid default action.")
+        return RedirectResponse(url="/admin/settings?domain_error=action", status_code=303)
+    now = _now().isoformat()
+    policy = db.upsert_domain_policy(
+        settings.db_path, normalized_domain, normalized_mode, normalized_action, now
+    )
+    _log_admin_action(settings.db_path, f"admin_domain_policy_upsert:{normalized_domain}", request)
+    if _wants_json(request):
+        return JSONResponse({"policy": dict(policy)})
+    return RedirectResponse(
+        url=f"/admin/settings?domain_saved={normalized_domain}", status_code=303
+    )
 
 
 @app.post("/admin/messages/clear")
