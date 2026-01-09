@@ -169,6 +169,47 @@ def clear_rate_limit_state(db_path: Path, source_ip: str) -> None:
         conn.commit()
 
 
+def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT domain, mode, default_action, created_at, updated_at
+            FROM domain_policy
+            ORDER BY domain ASC
+            """
+        ).fetchall()
+    return list(rows)
+
+
+def upsert_domain_policy(
+    db_path: Path, domain: str, mode: str, default_action: str, now: str
+) -> sqlite3.Row:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO domain_policy (domain, mode, default_action, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(domain) DO UPDATE SET
+                mode = excluded.mode,
+                default_action = excluded.default_action,
+                updated_at = excluded.updated_at
+            """,
+            (domain, mode, default_action, now, now),
+        )
+        row = conn.execute(
+            """
+            SELECT domain, mode, default_action, created_at, updated_at
+            FROM domain_policy
+            WHERE domain = ?
+            """,
+            (domain,),
+        ).fetchone()
+        conn.commit()
+    if not row:
+        raise RuntimeError("Failed to upsert domain policy.")
+    return row
+
+
 def list_messages(db_path: Path, include_quarantined: bool) -> Iterable[sqlite3.Row]:
     query = """
         SELECT

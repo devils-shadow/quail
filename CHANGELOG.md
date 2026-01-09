@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file. This projec
 
 - Added spam mitigation phase 1 schema tables and message metadata columns.
 - Implemented phase 2 deterministic ingest decisions with policy/rule metadata.
+- Added admin domain policy management endpoints and UI controls.
 - Added pytest to requirements to run the test suite locally.
 
 ## [0.1.0] - 2026-01-09
