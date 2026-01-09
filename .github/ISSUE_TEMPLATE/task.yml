@@ -1,0 +1,42 @@
+name: Task
+description: Use this template for new tasks, features or bug fixes.
+title: "[Task]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out all sections. Attach relevant evidence (logs, screenshots) where applicable.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: A concise, user‑oriented description of what needs to be achieved.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Explicit criteria that must be satisfied for this task to be considered done.
+      placeholder: |
+        - [ ] Criteria 1
+        - [ ] Criteria 2
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: Things that are specifically not part of this task.
+      placeholder: |
+        - Not included...
+    validations:
+      required: false
+  - type: textarea
+    id: verification
+    attributes:
+      label: How to Verify
+      description: Steps that a reviewer (or CI) should follow to verify that the task has been completed correctly.
+    validations:
+      required: true
