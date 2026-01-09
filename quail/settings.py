@@ -8,6 +8,7 @@ from pathlib import Path
 
 from quail import db
 
+
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path
@@ -19,9 +20,7 @@ class Settings:
 
 DEFAULT_DATA_DIR = Path(os.getenv("QUAIL_DATA_DIR", "/var/lib/quail"))
 DEFAULT_EML_DIR = Path(os.getenv("QUAIL_EML_DIR", str(DEFAULT_DATA_DIR / "eml")))
-DEFAULT_ATTACHMENT_DIR = Path(
-    os.getenv("QUAIL_ATTACHMENT_DIR", str(DEFAULT_DATA_DIR / "att"))
-)
+DEFAULT_ATTACHMENT_DIR = Path(os.getenv("QUAIL_ATTACHMENT_DIR", str(DEFAULT_DATA_DIR / "att")))
 DEFAULT_DB_PATH = Path(os.getenv("QUAIL_DB_PATH", str(DEFAULT_DATA_DIR / "quail.db")))
 DEFAULT_MAX_MESSAGE_SIZE_MB = int(os.getenv("QUAIL_MAX_MESSAGE_SIZE_MB", "10"))
 DEFAULT_RETENTION_DAYS = int(os.getenv("QUAIL_RETENTION_DAYS", "30"))

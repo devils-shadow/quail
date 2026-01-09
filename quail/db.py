@@ -110,9 +110,7 @@ def get_rate_limit_state(db_path: Path, source_ip: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
-def set_rate_limit_state(
-    db_path: Path, source_ip: str, attempts: int, window_start: str
-) -> None:
+def set_rate_limit_state(db_path: Path, source_ip: str, attempts: int, window_start: str) -> None:
     with get_connection(db_path) as conn:
         conn.execute(
             "INSERT INTO admin_rate_limits (source_ip, attempts, window_start) "

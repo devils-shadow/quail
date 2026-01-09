@@ -58,9 +58,7 @@ def _get_client_ip(request: Request) -> str:
 
 def _init_settings(settings_path: Path) -> None:
     if db.get_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY) is None:
-        db.set_setting(
-            settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_VALUE
-        )
+        db.set_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_VALUE)
     if db.get_setting(settings_path, RETENTION_DAYS_KEY) is None:
         db.set_setting(settings_path, RETENTION_DAYS_KEY, DEFAULT_RETENTION_DAYS)
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
@@ -374,9 +372,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
     allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
-    body, attachments, html_body = _parse_message_body(
-        Path(message["eml_path"]), allow_html
-    )
+    body, attachments, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
     sanitized_html = _sanitize_html(html_body) if allow_html and html_body else None
     return templates.TemplateResponse(
         "message.html",
@@ -495,7 +491,9 @@ async def admin_settings_post(
         if retention_value <= 0:
             raise ValueError
     except ValueError:
-        return RedirectResponse(url="/admin/settings?error=retention", status_code=HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            url="/admin/settings?error=retention", status_code=HTTP_303_SEE_OTHER
+        )
 
     normalized_mime_types = _normalize_mime_list(allowed_mime_types)
     if not normalized_mime_types:
