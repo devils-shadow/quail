@@ -36,7 +36,9 @@ table (`admin_pin_hash`). Session unlocks are short-lived and require the PIN
 again after expiration. TODO: provide a supported setup flow for the initial
 PIN. Admins can delete messages immediately from the message detail view.
 Admin settings also include per-domain policy controls (mode + default action)
-that apply to new ingests and require PIN confirmation for each change.
+that apply to new ingests and require PIN confirmation for each change. Admins
+can also manage per-domain allow/block rules (regex patterns with priorities)
+from the settings page; rule changes apply only to new ingests.
 
 ## HTML rendering
 

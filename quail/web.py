@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 import secrets
 from typing import Iterable
+from urllib.parse import quote
 
 import bleach
 from argon2.exceptions import InvalidHash, VerifyMismatchError
@@ -22,6 +24,8 @@ from quail.ingest import (
     DECISION_STATUSES,
     DEFAULT_ALLOWED_MIME_TYPES,
     DOMAIN_MODES,
+    MATCH_FIELDS,
+    RULE_TYPES,
     SETTINGS_ALLOWED_MIME_KEY,
 )
 from quail.logging_config import configure_logging
@@ -157,6 +161,107 @@ def _normalize_mime_list(value: str) -> str:
     items = [item.strip().lower() for item in value.split(",") if item.strip()]
     return ",".join(items)
 
+
+def _parse_enabled(raw_value: str | None) -> int:
+    if raw_value is None:
+        return 0
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "on", "yes"}:
+        return 1
+    return 0
+
+
+def _validate_regex(pattern: str) -> str | None:
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        return f"Invalid regex pattern: {exc}"
+    return None
+
+
+def _normalize_domain(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+def _rule_error_response(
+    request: Request, domain: str | None, message: str
+) -> RedirectResponse | JSONResponse:
+    if _wants_json(request):
+        raise HTTPException(status_code=400, detail=message)
+    domain_param = f"rules_domain={quote(domain)}&" if domain else ""
+    return RedirectResponse(
+        url=f"/admin/settings?{domain_param}rules_error={quote(message)}",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+def _serialize_rule(row: dict[str, str] | object) -> dict[str, str | int | None]:
+    if hasattr(row, "keys"):
+        data = dict(row)  # type: ignore[arg-type]
+    else:
+        data = dict(row)  # type: ignore[arg-type]
+    return {
+        "id": int(data["id"]),
+        "domain": data["domain"],
+        "rule_type": data["rule_type"],
+        "match_field": data["match_field"],
+        "pattern": data["pattern"],
+        "priority": int(data["priority"]),
+        "action": data["action"],
+        "enabled": int(data["enabled"]),
+        "note": data.get("note"),
+        "created_at": data["created_at"],
+        "updated_at": data["updated_at"],
+    }
+
+
+def _normalize_rule_fields(
+    request: Request,
+    rule_type: str,
+    match_field: str,
+    pattern: str,
+    priority: str,
+    action: str,
+    domain: str | None = None,
+) -> tuple[dict[str, object] | None, RedirectResponse | JSONResponse | None]:
+    normalized_domain = _normalize_domain(domain) if domain is not None else None
+    if domain is not None and not normalized_domain:
+        return None, _rule_error_response(request, domain, "Domain is required.")
+    normalized_rule_type = rule_type.strip().upper()
+    if normalized_rule_type not in RULE_TYPES:
+        return None, _rule_error_response(request, normalized_domain, "Invalid rule type.")
+    normalized_match_field = match_field.strip().upper()
+    if normalized_match_field not in MATCH_FIELDS:
+        return None, _rule_error_response(request, normalized_domain, "Invalid match field.")
+    normalized_action = action.strip().upper()
+    if normalized_action not in DECISION_STATUSES:
+        return None, _rule_error_response(request, normalized_domain, "Invalid action.")
+    cleaned_pattern = pattern.strip()
+    if not cleaned_pattern:
+        return None, _rule_error_response(request, normalized_domain, "Pattern is required.")
+    regex_error = _validate_regex(cleaned_pattern)
+    if regex_error:
+        return None, _rule_error_response(request, normalized_domain, regex_error)
+    try:
+        priority_value = int(priority)
+    except ValueError:
+        return None, _rule_error_response(request, normalized_domain, "Priority must be an integer.")
+    if priority_value < 0:
+        return None, _rule_error_response(request, normalized_domain, "Priority must be non-negative.")
+    return (
+        {
+            "domain": normalized_domain,
+            "rule_type": normalized_rule_type,
+            "match_field": normalized_match_field,
+            "pattern": cleaned_pattern,
+            "priority": priority_value,
+            "action": normalized_action,
+        },
+        None,
+    )
 
 def _wants_json(request: Request) -> bool:
     accept = request.headers.get("accept", "")
@@ -501,6 +606,8 @@ async def admin_settings(request: Request) -> HTMLResponse:
     settings = get_settings()
     _log_admin_action(settings.db_path, "admin_settings_view", request)
     storage_stats = _get_storage_stats(settings.db_path)
+    rules_domain = _normalize_domain(request.query_params.get("rules_domain"))
+    rules = db.list_address_rules(settings.db_path, rules_domain) if rules_domain else []
     context = {
         "request": request,
         "allowed_mime_types": db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
@@ -517,6 +624,11 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "domain_policies": [dict(row) for row in db.list_domain_policies(settings.db_path)],
         "domain_modes": DOMAIN_MODES,
         "domain_actions": DECISION_STATUSES,
+        "rules_domain": rules_domain,
+        "rules": [dict(row) for row in rules],
+        "rule_types": RULE_TYPES,
+        "match_fields": MATCH_FIELDS,
+        "rule_actions": DECISION_STATUSES,
     }
     return templates.TemplateResponse("admin_settings.html", context)
 
@@ -609,6 +721,202 @@ async def admin_domain_policies_post(
     return RedirectResponse(
         url=f"/admin/settings?domain_saved={normalized_domain}", status_code=303
     )
+
+
+@app.get("/admin/rules", response_class=JSONResponse)
+async def admin_rules(request: Request, domain: str | None = None) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    normalized_domain = _normalize_domain(domain)
+    if not normalized_domain:
+        raise HTTPException(status_code=400, detail="Domain is required.")
+    settings = get_settings()
+    rules = [
+        _serialize_rule(row)
+        for row in db.list_address_rules(settings.db_path, normalized_domain)
+    ]
+    return JSONResponse({"domain": normalized_domain, "rules": rules})
+
+
+@app.post("/admin/rules", response_class=JSONResponse)
+async def admin_rules_post(
+    request: Request,
+    domain: str = Form(...),
+    rule_type: str = Form(...),
+    match_field: str = Form(...),
+    pattern: str = Form(...),
+    priority: str = Form(...),
+    action: str = Form(...),
+    enabled: str | None = Form(None),
+    note: str | None = Form(None),
+    admin_pin: str | None = Form(None),
+) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    normalized, error_response = _normalize_rule_fields(
+        request,
+        rule_type,
+        match_field,
+        pattern,
+        priority,
+        action,
+        domain=domain,
+    )
+    if error_response:
+        return error_response
+    enabled_value = _parse_enabled(enabled)
+    row = db.create_address_rule(
+        settings.db_path,
+        normalized["domain"],  # type: ignore[arg-type]
+        normalized["rule_type"],  # type: ignore[arg-type]
+        normalized["match_field"],  # type: ignore[arg-type]
+        normalized["pattern"],  # type: ignore[arg-type]
+        normalized["priority"],  # type: ignore[arg-type]
+        normalized["action"],  # type: ignore[arg-type]
+        enabled_value,
+        note.strip() if note else None,
+        _now().isoformat(),
+    )
+    _log_admin_action(settings.db_path, f"admin_rule_created:{row['id']}", request)
+    if _wants_json(request):
+        return JSONResponse({"rule": _serialize_rule(row)})
+    return RedirectResponse(
+        url=f"/admin/settings?rules_domain={quote(row['domain'])}&rules_saved=1",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/admin/rules/test", response_class=JSONResponse)
+async def admin_rules_test(
+    request: Request,
+    pattern: str = Form(...),
+    sample: str = Form(""),
+    admin_pin: str | None = Form(None),
+    rules_domain: str | None = Form(None),
+) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    cleaned_pattern = pattern.strip()
+    if not cleaned_pattern:
+        return _rule_error_response(request, rules_domain, "Pattern is required.")
+    regex_error = _validate_regex(cleaned_pattern)
+    if regex_error:
+        return _rule_error_response(request, rules_domain, regex_error)
+    matched = bool(re.search(cleaned_pattern, sample or ""))
+    if _wants_json(request):
+        return JSONResponse({"matched": matched})
+    result = "matched" if matched else "no_match"
+    normalized_domain = _normalize_domain(rules_domain) or ""
+    domain_param = f"rules_domain={quote(normalized_domain)}&" if normalized_domain else ""
+    return RedirectResponse(
+        url=f"/admin/settings?{domain_param}rules_test={result}",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.api_route("/admin/rules/{rule_id}", methods=["PUT", "POST"], response_class=JSONResponse)
+async def admin_rules_update(
+    request: Request,
+    rule_id: int,
+    rule_type: str = Form(...),
+    match_field: str = Form(...),
+    pattern: str = Form(...),
+    priority: str = Form(...),
+    action: str = Form(...),
+    enabled: str | None = Form(None),
+    note: str | None = Form(None),
+    admin_pin: str | None = Form(None),
+) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    existing = db.get_address_rule(settings.db_path, rule_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+    normalized, error_response = _normalize_rule_fields(
+        request,
+        rule_type,
+        match_field,
+        pattern,
+        priority,
+        action,
+    )
+    if error_response:
+        return error_response
+    enabled_value = _parse_enabled(enabled)
+    row = db.update_address_rule(
+        settings.db_path,
+        rule_id,
+        normalized["rule_type"],  # type: ignore[arg-type]
+        normalized["match_field"],  # type: ignore[arg-type]
+        normalized["pattern"],  # type: ignore[arg-type]
+        normalized["priority"],  # type: ignore[arg-type]
+        normalized["action"],  # type: ignore[arg-type]
+        enabled_value,
+        note.strip() if note else None,
+        _now().isoformat(),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+    _log_admin_action(settings.db_path, f"admin_rule_updated:{rule_id}", request)
+    if _wants_json(request):
+        return JSONResponse({"rule": _serialize_rule(row)})
+    return RedirectResponse(
+        url=f"/admin/settings?rules_domain={quote(row['domain'])}&rules_saved=1",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.delete("/admin/rules/{rule_id}", response_class=JSONResponse)
+async def admin_rules_delete(
+    request: Request,
+    rule_id: int,
+    admin_pin: str | None = None,
+) -> JSONResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    existing = db.get_address_rule(settings.db_path, rule_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+    deleted = db.delete_address_rule(settings.db_path, rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+    _log_admin_action(settings.db_path, f"admin_rule_deleted:{rule_id}", request)
+    if _wants_json(request):
+        return JSONResponse({"deleted": True, "rule_id": rule_id})
+    return RedirectResponse(
+        url=f"/admin/settings?rules_domain={quote(existing['domain'])}&rules_deleted=1",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/admin/rules/{rule_id}/delete")
+async def admin_rules_delete_post(
+    request: Request,
+    rule_id: int,
+    admin_pin: str | None = Form(None),
+) -> RedirectResponse:
+    return await admin_rules_delete(request, rule_id, admin_pin)
 
 
 @app.post("/admin/messages/clear")
