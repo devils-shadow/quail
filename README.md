@@ -22,9 +22,9 @@ alongside each message.
 ## Configuration
 
 Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
-needed. The default bind host in the example config is `127.0.0.1` so the service
-binds locally; configure any reverse proxy, DNS, or static IP separately if you
-need external access.
+needed. The default bind host in the example config is `127.0.0.1`, so the
+service binds to localhost unless you change it; use a reverse proxy and DNS if
+you need external access.
 
 ## Admin access
 
