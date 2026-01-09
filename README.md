@@ -22,8 +22,9 @@ alongside each message.
 ## Configuration
 
 Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
-needed. The default bind host in the example config is `192.168.0.252` to match
-your VPN-accessible IP; update it if your server uses a different address.
+needed. The default bind host in the example config is `127.0.0.1`, so the
+service binds to localhost unless you change it; use a reverse proxy and DNS if
+you need external access.
 
 ## Admin access
 
