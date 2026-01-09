@@ -19,7 +19,10 @@ SCHEMA = [
         message_id TEXT,
         size_bytes INTEGER NOT NULL,
         eml_path TEXT NOT NULL,
-        quarantined INTEGER NOT NULL DEFAULT 0
+        quarantined INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'INBOX',
+        quarantine_reason TEXT,
+        ingest_decision_meta TEXT
     )
     """,
     """
@@ -54,6 +57,31 @@ SCHEMA = [
         window_start TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS domain_policy (
+        id INTEGER PRIMARY KEY,
+        domain TEXT UNIQUE NOT NULL,
+        mode TEXT NOT NULL,
+        default_action TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS address_rule (
+        id INTEGER PRIMARY KEY,
+        domain TEXT NOT NULL,
+        rule_type TEXT NOT NULL,
+        match_field TEXT NOT NULL,
+        pattern TEXT NOT NULL,
+        priority INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
 ]
 
 
@@ -69,7 +97,20 @@ def init_db(db_path: Path) -> None:
     with get_connection(db_path) as conn:
         for statement in SCHEMA:
             conn.execute(statement)
+        _ensure_message_columns(conn)
         conn.commit()
+
+
+def _ensure_message_columns(conn: sqlite3.Connection) -> None:
+    existing_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(messages)").fetchall()
+    }
+    if "status" not in existing_columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN status TEXT NOT NULL DEFAULT 'INBOX'")
+    if "quarantine_reason" not in existing_columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN quarantine_reason TEXT")
+    if "ingest_decision_meta" not in existing_columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN ingest_decision_meta TEXT")
 
 
 def get_setting(db_path: Path, key: str) -> str | None:

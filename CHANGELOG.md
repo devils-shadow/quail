@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Added spam mitigation phase 1 schema tables and message metadata columns.
+
 ## [0.1.0] - 2026-01-09
 
 ### Added
