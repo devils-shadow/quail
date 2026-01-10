@@ -41,6 +41,9 @@ Admin settings also include per-domain policy controls (mode + default action)
 that apply to new ingests and require PIN confirmation for each change. Admins
 can also manage per-domain allow/block rules (regex patterns with priorities)
 from the settings page; rule changes apply only to new ingests.
+Admins can configure separate retention windows for inbox and quarantine
+messages, plus optional per-domain quarantine retention overrides in the
+domain policy section.
 
 ## HTML rendering
 

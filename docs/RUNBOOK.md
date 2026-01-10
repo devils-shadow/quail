@@ -26,7 +26,7 @@ To upgrade Quail to a newer version:
 
 - **Inbox access:** Access the web UI via the configured address (VPN or localhost). The default view shows plaintext messages; administrators can enable sanitized HTML rendering【819940561035949†L35-L40】.
 - **Admin actions:** Click the Unlock button and enter the shared admin PIN to perform privileged actions such as changing settings, deleting messages or modifying retention policies.
-- **Retention policy:** The purge timer automatically deletes messages older than the configured retention period (default 30 days)【104907567664902†L87-L95】.
+- **Retention policy:** The purge timer automatically deletes inbox messages older than the configured retention period (default 30 days) and quarantined/dropped messages older than the quarantine retention period (default 3 days). Admins can optionally set per-domain quarantine overrides in the settings UI.
 
 ## Troubleshooting
 

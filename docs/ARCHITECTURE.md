@@ -16,7 +16,7 @@ The ingest entrypoint stores the full raw email as a `.eml` file and extracts me
 
 ## Retention and Purge
 
-By default messages and attachments are retained for **30 days**. A daily purge job deletes expired `.eml` files, extracted attachments and database rows【104907567664902†L87-L95】. Administrators can adjust the retention period via the UI, and they may delete individual messages manually【104907567664902†L89-L96】.
+By default inbox messages and attachments are retained for **30 days**, while quarantined or dropped messages use a shorter default retention window. A daily purge job deletes expired `.eml` files, extracted attachments and database rows. Administrators can adjust both retention periods via the UI, optionally set per-domain quarantine overrides and delete individual messages manually.
 
 ## Admin Model
 

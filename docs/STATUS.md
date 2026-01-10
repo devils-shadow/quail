@@ -6,13 +6,12 @@
 
 ## Overview
 
-The initial repository scaffolding and ingest pipeline are in place. Retention purge job and admin settings form are implemented, while the broader FastAPI UI and installation/upgrade automation are still stubbed with TODOs【819940561035949†L8-L10】.
+The initial repository scaffolding and ingest pipeline are in place. Retention purge jobs now support separate quarantine retention windows, while the broader FastAPI UI and installation/upgrade automation are still stubbed with TODOs.
 
 ## Known Issues
 
 - The full web UI for browsing messages and managing settings is incomplete.
 - Install and upgrade scripts may require additional hardening and error handling.
-- No automated tests are present; coverage is effectively zero.
 - Admin PIN setup flow is manual and undocumented.
 
 ## Next Milestones

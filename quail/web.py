@@ -36,9 +36,11 @@ from quail.settings import get_settings
 
 ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
+QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
 ALLOW_HTML_KEY = "allow_html"
 DEFAULT_ALLOWED_MIME_TYPES_VALUE = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
 DEFAULT_RETENTION_DAYS = "30"
+DEFAULT_QUARANTINE_RETENTION_DAYS = "3"
 DEFAULT_ALLOW_HTML = "false"
 ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
@@ -71,6 +73,8 @@ def _init_settings(settings_path: Path) -> None:
         db.set_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_VALUE)
     if db.get_setting(settings_path, RETENTION_DAYS_KEY) is None:
         db.set_setting(settings_path, RETENTION_DAYS_KEY, DEFAULT_RETENTION_DAYS)
+    if db.get_setting(settings_path, QUARANTINE_RETENTION_DAYS_KEY) is None:
+        db.set_setting(settings_path, QUARANTINE_RETENTION_DAYS_KEY, DEFAULT_QUARANTINE_RETENTION_DAYS)
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
 
@@ -769,6 +773,10 @@ async def admin_settings(request: Request) -> HTMLResponse:
         or DEFAULT_ALLOWED_MIME_TYPES_VALUE,
         "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
         or DEFAULT_RETENTION_DAYS,
+        "quarantine_retention_days": db.get_setting(
+            settings.db_path, QUARANTINE_RETENTION_DAYS_KEY
+        )
+        or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
         "message_count": storage_stats["message_count"],
         "message_bytes": _format_bytes(storage_stats["message_bytes"]),
@@ -793,6 +801,7 @@ async def admin_settings_post(
     request: Request,
     allowed_mime_types: str = Form(""),
     retention_days: str = Form(""),
+    quarantine_retention_days: str = Form(""),
     allow_html: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
@@ -809,12 +818,25 @@ async def admin_settings_post(
         return RedirectResponse(
             url="/admin/settings?error=retention", status_code=HTTP_303_SEE_OTHER
         )
+    try:
+        quarantine_retention_value = int(quarantine_retention_days)
+        if quarantine_retention_value <= 0:
+            raise ValueError
+    except ValueError:
+        return RedirectResponse(
+            url="/admin/settings?error=quarantine_retention", status_code=HTTP_303_SEE_OTHER
+        )
 
     normalized_mime_types = _normalize_mime_list(allowed_mime_types)
     if not normalized_mime_types:
         normalized_mime_types = DEFAULT_ALLOWED_MIME_TYPES_VALUE
     db.set_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY, normalized_mime_types)
     db.set_setting(settings.db_path, RETENTION_DAYS_KEY, str(retention_value))
+    db.set_setting(
+        settings.db_path,
+        QUARANTINE_RETENTION_DAYS_KEY,
+        str(quarantine_retention_value),
+    )
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
     if admin_pin:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
@@ -842,6 +864,7 @@ async def admin_domain_policies_post(
     domain: str = Form(...),
     mode: str = Form(...),
     default_action: str = Form(...),
+    quarantine_retention_days: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> JSONResponse:
     redirect = _require_admin_session(request)
@@ -866,9 +889,26 @@ async def admin_domain_policies_post(
         if _wants_json(request):
             raise HTTPException(status_code=400, detail="Invalid default action.")
         return RedirectResponse(url="/admin/settings?domain_error=action", status_code=303)
+    retention_override_value: int | None = None
+    if quarantine_retention_days:
+        try:
+            retention_override_value = int(quarantine_retention_days)
+        except ValueError:
+            retention_override_value = None
+        if not retention_override_value or retention_override_value <= 0:
+            if _wants_json(request):
+                raise HTTPException(status_code=400, detail="Invalid retention override.")
+            return RedirectResponse(
+                url="/admin/settings?domain_error=retention", status_code=303
+            )
     now = _now().isoformat()
     policy = db.upsert_domain_policy(
-        settings.db_path, normalized_domain, normalized_mode, normalized_action, now
+        settings.db_path,
+        normalized_domain,
+        normalized_mode,
+        normalized_action,
+        retention_override_value,
+        now,
     )
     _log_admin_action(settings.db_path, f"admin_domain_policy_upsert:{normalized_domain}", request)
     if _wants_json(request):

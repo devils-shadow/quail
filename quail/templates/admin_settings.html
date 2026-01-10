@@ -11,6 +11,9 @@
 {% if request.query_params.get("error") == "retention" %}
 <p>Retention must be a positive number.</p>
 {% endif %}
+{% if request.query_params.get("error") == "quarantine_retention" %}
+<p>Quarantine retention must be a positive number.</p>
+{% endif %}
 {% if request.query_params.get("domain_saved") %}
 <p>Domain policy saved for {{ request.query_params.get("domain_saved") }}.</p>
 {% endif %}
@@ -25,6 +28,9 @@
 {% endif %}
 {% if request.query_params.get("domain_error") == "action" %}
 <p>Default action must be one of: {{ domain_actions | join(", ") }}.</p>
+{% endif %}
+{% if request.query_params.get("domain_error") == "retention" %}
+<p>Quarantine retention override must be a positive number.</p>
 {% endif %}
 {% if request.query_params.get("rules_saved") %}
 <p>Rule saved.</p>
@@ -49,6 +55,16 @@
   <div>
     <label for="retention_days">Retention days</label>
     <input id="retention_days" name="retention_days" type="number" min="1" value="{{ retention_days }}" />
+  </div>
+  <div>
+    <label for="quarantine_retention_days">Quarantine retention days</label>
+    <input
+      id="quarantine_retention_days"
+      name="quarantine_retention_days"
+      type="number"
+      min="1"
+      value="{{ quarantine_retention_days }}"
+    />
   </div>
   <div>
     <label for="allow_html">Allow sanitized HTML rendering</label>
@@ -88,6 +104,16 @@
         </select>
       </div>
       <div>
+        <label for="retention_{{ loop.index }}">Quarantine retention override (days)</label>
+        <input
+          id="retention_{{ loop.index }}"
+          name="quarantine_retention_days"
+          type="number"
+          min="1"
+          value="{{ policy.quarantine_retention_days or '' }}"
+        />
+      </div>
+      <div>
         <label>Last modified</label>
         <span>{{ policy.updated_at }}</span>
       </div>
@@ -124,6 +150,10 @@
       <option value="{{ action }}">{{ action }}</option>
       {% endfor %}
     </select>
+  </div>
+  <div>
+    <label for="domain_policy_retention">Quarantine retention override (days)</label>
+    <input id="domain_policy_retention" name="quarantine_retention_days" type="number" min="1" />
   </div>
   <div>
     <label for="domain_policy_pin">Admin PIN</label>

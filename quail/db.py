@@ -63,6 +63,7 @@ SCHEMA = [
         domain TEXT UNIQUE NOT NULL,
         mode TEXT NOT NULL,
         default_action TEXT NOT NULL,
+        quarantine_retention_days INTEGER,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )
@@ -98,6 +99,7 @@ def init_db(db_path: Path) -> None:
         for statement in SCHEMA:
             conn.execute(statement)
         _ensure_message_columns(conn)
+        _ensure_domain_policy_columns(conn)
         conn.commit()
 
 
@@ -111,6 +113,14 @@ def _ensure_message_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN quarantine_reason TEXT")
     if "ingest_decision_meta" not in existing_columns:
         conn.execute("ALTER TABLE messages ADD COLUMN ingest_decision_meta TEXT")
+
+
+def _ensure_domain_policy_columns(conn: sqlite3.Connection) -> None:
+    existing_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(domain_policy)").fetchall()
+    }
+    if "quarantine_retention_days" not in existing_columns:
+        conn.execute("ALTER TABLE domain_policy ADD COLUMN quarantine_retention_days INTEGER")
 
 
 def get_setting(db_path: Path, key: str) -> str | None:
@@ -173,7 +183,13 @@ def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
     with get_connection(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT domain, mode, default_action, created_at, updated_at
+            SELECT
+                domain,
+                mode,
+                default_action,
+                quarantine_retention_days,
+                created_at,
+                updated_at
             FROM domain_policy
             ORDER BY domain ASC
             """
@@ -182,23 +198,42 @@ def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
 
 
 def upsert_domain_policy(
-    db_path: Path, domain: str, mode: str, default_action: str, now: str
+    db_path: Path,
+    domain: str,
+    mode: str,
+    default_action: str,
+    quarantine_retention_days: int | None,
+    now: str,
 ) -> sqlite3.Row:
     with get_connection(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO domain_policy (domain, mode, default_action, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO domain_policy (
+                domain,
+                mode,
+                default_action,
+                quarantine_retention_days,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(domain) DO UPDATE SET
                 mode = excluded.mode,
                 default_action = excluded.default_action,
+                quarantine_retention_days = excluded.quarantine_retention_days,
                 updated_at = excluded.updated_at
             """,
-            (domain, mode, default_action, now, now),
+            (domain, mode, default_action, quarantine_retention_days, now, now),
         )
         row = conn.execute(
             """
-            SELECT domain, mode, default_action, created_at, updated_at
+            SELECT
+                domain,
+                mode,
+                default_action,
+                quarantine_retention_days,
+                created_at,
+                updated_at
             FROM domain_policy
             WHERE domain = ?
             """,
@@ -233,6 +268,26 @@ def list_address_rules(db_path: Path, domain: str) -> list[sqlite3.Row]:
             (domain,),
         ).fetchall()
     return list(rows)
+
+
+def get_domain_quarantine_retention_overrides(db_path: Path) -> dict[str, int]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT domain, quarantine_retention_days
+            FROM domain_policy
+            WHERE quarantine_retention_days IS NOT NULL
+            """
+        ).fetchall()
+    overrides: dict[str, int] = {}
+    for row in rows:
+        try:
+            value = int(row["quarantine_retention_days"])
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            overrides[row["domain"]] = value
+    return overrides
 
 
 def create_address_rule(
