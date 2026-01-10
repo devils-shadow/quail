@@ -1556,9 +1556,7 @@ async def admin_clear_messages(request: Request) -> RedirectResponse:
         return RedirectResponse(url="/admin/unlock", status_code=303)
     settings = get_settings()
     with db.get_connection(settings.db_path) as conn:
-        before_count = conn.execute("SELECT COUNT(*) AS count FROM messages").fetchone()[
-            "count"
-        ]
+        before_count = conn.execute("SELECT COUNT(*) AS count FROM messages").fetchone()["count"]
     deleted_count = _delete_all_messages(settings.db_path)
     _log_admin_action(
         settings.db_path,
