@@ -1140,17 +1140,21 @@ async def admin_quarantine_restore(
             domain, sender_domain, recipient_localpart, start_date, end_date
         )
         return RedirectResponse(
-            url=f"/admin/quarantine{query}&error=selection" if query else "/admin/quarantine?error=selection",
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
             status_code=HTTP_303_SEE_OTHER,
         )
     for message_id_value in message_ids:
         _update_message_status(settings.db_path, message_id_value, "INBOX")
-        _log_admin_action(
-            settings.db_path, f"admin_quarantine_restore:{message_id_value}", request
-        )
+        _log_admin_action(settings.db_path, f"admin_quarantine_restore:{message_id_value}", request)
     if _wants_json(request):
         return JSONResponse({"restored": message_ids})
-    query = _build_quarantine_query(domain, sender_domain, recipient_localpart, start_date, end_date)
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
     return RedirectResponse(
         url=f"/admin/quarantine{query}&restored=1" if query else "/admin/quarantine?restored=1",
         status_code=HTTP_303_SEE_OTHER,
@@ -1182,17 +1186,21 @@ async def admin_quarantine_delete(
             domain, sender_domain, recipient_localpart, start_date, end_date
         )
         return RedirectResponse(
-            url=f"/admin/quarantine{query}&error=selection" if query else "/admin/quarantine?error=selection",
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
             status_code=HTTP_303_SEE_OTHER,
         )
     for message_id_value in message_ids:
         _delete_message(settings.db_path, message_id_value)
-        _log_admin_action(
-            settings.db_path, f"admin_quarantine_delete:{message_id_value}", request
-        )
+        _log_admin_action(settings.db_path, f"admin_quarantine_delete:{message_id_value}", request)
     if _wants_json(request):
         return JSONResponse({"deleted": message_ids})
-    query = _build_quarantine_query(domain, sender_domain, recipient_localpart, start_date, end_date)
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
     return RedirectResponse(
         url=f"/admin/quarantine{query}&deleted=1" if query else "/admin/quarantine?deleted=1",
         status_code=HTTP_303_SEE_OTHER,
@@ -1226,7 +1234,11 @@ async def admin_quarantine_rule_from_selection(
             domain, sender_domain, recipient_localpart, start_date, end_date
         )
         return RedirectResponse(
-            url=f"/admin/quarantine{query}&error=selection" if query else "/admin/quarantine?error=selection",
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
             status_code=HTTP_303_SEE_OTHER,
         )
     normalized_rule_type = rule_type.strip().upper()
@@ -1291,11 +1303,15 @@ async def admin_quarantine_rule_from_selection(
         )
     if _wants_json(request):
         return JSONResponse({"created_rule_ids": [row["id"] for row in created_rules]})
-    query = _build_quarantine_query(domain, sender_domain, recipient_localpart, start_date, end_date)
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
     return RedirectResponse(
-        url=f"/admin/quarantine{query}&rules_created=1"
-        if query
-        else "/admin/quarantine?rules_created=1",
+        url=(
+            f"/admin/quarantine{query}&rules_created=1"
+            if query
+            else "/admin/quarantine?rules_created=1"
+        ),
         status_code=HTTP_303_SEE_OTHER,
     )
 
