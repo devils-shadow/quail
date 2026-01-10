@@ -128,9 +128,7 @@ def test_acceptance_paused_blocks_new_inbox_entries(tmp_path, monkeypatch) -> No
     _ingest_message("user@m.cst.ro", "Paused policy")
 
     with db.get_connection(settings_obj.db_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM messages ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
 
     assert row["status"] != "INBOX"
 
@@ -152,9 +150,7 @@ def test_acceptance_restricted_requires_allow_rules(tmp_path, monkeypatch) -> No
     _ingest_message("user@m.cst.ro", "Restricted without allow")
 
     with db.get_connection(settings_obj.db_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM messages ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
 
     assert row["status"] == "QUARANTINE"
 
@@ -174,9 +170,7 @@ def test_acceptance_restricted_requires_allow_rules(tmp_path, monkeypatch) -> No
     _ingest_message("user@m.cst.ro", "Restricted with allow")
 
     with db.get_connection(settings_obj.db_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM messages ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
 
     assert row["status"] == "INBOX"
 
@@ -210,9 +204,7 @@ def test_acceptance_block_rules_default_to_quarantine(tmp_path, monkeypatch) -> 
     _ingest_message("user@m.cst.ro", "spam message")
 
     with db.get_connection(settings_obj.db_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM messages ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
 
     assert row["status"] == "QUARANTINE"
 
