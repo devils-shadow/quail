@@ -390,6 +390,19 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
                 ],
             )
         conn.commit()
+    recipient_localpart, recipient_domain = _split_envelope_rcpt(envelope_rcpt)
+    sender_domain = _extract_domain(_extract_primary_address(metadata["from_addr"]))
+    db.log_ingest_decision(
+        settings.db_path,
+        int(message_id),
+        status,
+        quarantine_reason,
+        recipient_domain or None,
+        recipient_localpart or None,
+        sender_domain,
+        None,
+        _now_iso(),
+    )
 
     if status == "DROP":
         LOGGER.warning("Message dropped by ingest policy for %s.", envelope_rcpt)

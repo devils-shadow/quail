@@ -347,6 +347,25 @@
   <li>Total storage: {{ total_bytes }}</li>
 </ul>
 
+<h2>Ingest metrics (last 24h)</h2>
+<ul>
+  <li>Inbox messages: {{ inbox_message_count }}</li>
+  <li>Quarantine messages: {{ quarantine_message_count }}</li>
+  <li>Dropped messages (last 24h): {{ dropped_message_count }}</li>
+  <li>Ingest total (last 24h): {{ ingest_last_24h }}</li>
+  <li>Recent ingest rate (messages/hour): {{ "%.2f" | format(recent_ingest_rate) }}</li>
+</ul>
+<h3>Top sender domains (last 24h)</h3>
+{% if top_sender_domains %}
+  <ul>
+  {% for entry in top_sender_domains %}
+    <li>{{ entry.domain }}: {{ entry.count }}</li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <p>No sender domain data available yet.</p>
+{% endif %}
+
 <h2>Danger zone</h2>
 <form method="post" action="/admin/messages/clear">
   <button type="submit" onclick="return confirm('Delete all messages and attachments?')">

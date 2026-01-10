@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
@@ -160,8 +162,34 @@ def _is_admin(request: Request) -> bool:
         return False
 
 
-def _log_admin_action(db_path: Path, action: str, request: Request) -> None:
-    db.log_admin_action(db_path, action, _get_client_ip(request), _now().isoformat())
+def _serialize_admin_snapshot(value: object | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, default=str, sort_keys=True)
+
+
+def _log_admin_action(
+    db_path: Path,
+    action: str,
+    request: Request,
+    *,
+    actor: str | None = "admin",
+    entity: str | None = None,
+    before_state: object | None = None,
+    after_state: object | None = None,
+) -> None:
+    db.log_admin_action(
+        db_path,
+        action,
+        _get_client_ip(request),
+        _now().isoformat(),
+        actor=actor,
+        entity=entity,
+        before_state=_serialize_admin_snapshot(before_state),
+        after_state=_serialize_admin_snapshot(after_state),
+    )
 
 
 def _normalize_mime_list(value: str) -> str:
@@ -484,6 +512,55 @@ def _get_storage_stats(db_path: Path) -> dict[str, int]:
     }
 
 
+def _get_ingest_metrics(db_path: Path, now: datetime | None = None) -> dict[str, object]:
+    current_time = now or _now()
+    cutoff = current_time - timedelta(hours=24)
+    with db.get_connection(db_path) as conn:
+        inbox_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM messages WHERE status = 'INBOX' AND quarantined = 0"
+        ).fetchone()
+        quarantine_row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM messages
+            WHERE (status = 'QUARANTINE' OR quarantined = 1)
+              AND status != 'DROP'
+            """
+        ).fetchone()
+        dropped_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM messages WHERE status = 'DROP' AND received_at >= ?",
+            (cutoff.isoformat(),),
+        ).fetchone()
+        ingest_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM messages WHERE received_at >= ?",
+            (cutoff.isoformat(),),
+        ).fetchone()
+        sender_rows = conn.execute(
+            "SELECT from_addr FROM messages WHERE received_at >= ? AND from_addr IS NOT NULL",
+            (cutoff.isoformat(),),
+        ).fetchall()
+    sender_counts: Counter[str] = Counter()
+    for row in sender_rows:
+        address = _extract_primary_address(row["from_addr"])
+        domain = _extract_domain(address)
+        if domain:
+            sender_counts[domain] += 1
+    top_domains = [
+        {"domain": domain, "count": count}
+        for domain, count in sorted(sender_counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+    ]
+    ingest_count = int(ingest_row["count"] or 0)
+    ingest_rate = ingest_count / 24 if ingest_count else 0.0
+    return {
+        "inbox_count": int(inbox_row["count"] or 0),
+        "quarantine_count": int(quarantine_row["count"] or 0),
+        "dropped_last_24h": int(dropped_row["count"] or 0),
+        "recent_ingest_rate": ingest_rate,
+        "top_sender_domains": top_domains,
+        "ingest_last_24h": ingest_count,
+    }
+
+
 def _iter_messages(
     db_path: Path, include_quarantined: bool, inbox_filter: str | None
 ) -> Iterable[dict[str, str]]:
@@ -703,8 +780,23 @@ async def admin_delete_message(request: Request, message_id: int) -> RedirectRes
     if not _is_admin(request):
         return RedirectResponse(url="/admin/unlock", status_code=303)
     settings = get_settings()
+    message = _get_message(settings.db_path, message_id)
     _delete_message(settings.db_path, message_id)
-    _log_admin_action(settings.db_path, f"admin_message_deleted:{message_id}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_message_deleted:{message_id}",
+        request,
+        entity=f"message:{message_id}",
+        before_state={
+            "id": message["id"],
+            "received_at": message["received_at"],
+            "envelope_rcpt": message["envelope_rcpt"],
+            "from_addr": message["from_addr"],
+            "subject": message["subject"],
+            "size_bytes": message["size_bytes"],
+        },
+        after_state=None,
+    )
     return RedirectResponse(url="/inbox", status_code=303)
 
 
@@ -730,9 +822,17 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
         return RedirectResponse(url="/admin/unlock?error=rate_limited", status_code=303)
 
     stored_hash = _get_admin_pin_hash(settings.db_path)
+    pin_configured = bool(stored_hash)
     if stored_hash is None:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(pin))
-        _log_admin_action(settings.db_path, "admin_pin_initialized", request)
+        _log_admin_action(
+            settings.db_path,
+            "admin_pin_initialized",
+            request,
+            entity="admin_pin",
+            before_state={"pin_configured": pin_configured},
+            after_state={"pin_configured": True},
+        )
     elif stored_hash is not None:
         try:
             is_valid = verify_pin(pin, stored_hash)
@@ -747,7 +847,13 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
     token_hash = hash_pin(token)
     expires_at = now + ADMIN_SESSION_TTL
     _set_session_state(settings.db_path, token_hash, expires_at)
-    _log_admin_action(settings.db_path, "admin_unlock", request)
+    _log_admin_action(
+        settings.db_path,
+        "admin_unlock",
+        request,
+        entity="admin_session",
+        after_state={"expires_at": expires_at.isoformat()},
+    )
     response = RedirectResponse(url="/admin/settings", status_code=303)
     response.set_cookie(
         ADMIN_SESSION_COOKIE,
@@ -765,8 +871,9 @@ async def admin_settings(request: Request) -> HTMLResponse:
     if redirect:
         return redirect
     settings = get_settings()
-    _log_admin_action(settings.db_path, "admin_settings_view", request)
+    _log_admin_action(settings.db_path, "admin_settings_view", request, entity="settings")
     storage_stats = _get_storage_stats(settings.db_path)
+    ingest_metrics = _get_ingest_metrics(settings.db_path)
     rules_domain = _normalize_domain(request.query_params.get("rules_domain"))
     rules = db.list_address_rules(settings.db_path, rules_domain) if rules_domain else []
     context = {
@@ -784,6 +891,12 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "total_bytes": _format_bytes(
             storage_stats["message_bytes"] + storage_stats["attachment_bytes"]
         ),
+        "inbox_message_count": ingest_metrics["inbox_count"],
+        "quarantine_message_count": ingest_metrics["quarantine_count"],
+        "dropped_message_count": ingest_metrics["dropped_last_24h"],
+        "ingest_last_24h": ingest_metrics["ingest_last_24h"],
+        "recent_ingest_rate": ingest_metrics["recent_ingest_rate"],
+        "top_sender_domains": ingest_metrics["top_sender_domains"],
         "domain_policies": [dict(row) for row in db.list_domain_policies(settings.db_path)],
         "domain_modes": DOMAIN_MODES,
         "domain_actions": DECISION_STATUSES,
@@ -810,6 +923,16 @@ async def admin_settings_post(
         return redirect
 
     settings = get_settings()
+    before_settings = {
+        "allowed_mime_types": db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
+        or DEFAULT_ALLOWED_MIME_TYPES_VALUE,
+        "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
+        or DEFAULT_RETENTION_DAYS,
+        "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
+        or DEFAULT_QUARANTINE_RETENTION_DAYS,
+        "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
+    }
+    pin_configured_before = bool(_get_admin_pin_hash(settings.db_path))
     try:
         retention_value = int(retention_days)
         if retention_value <= 0:
@@ -840,8 +963,28 @@ async def admin_settings_post(
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
     if admin_pin:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
-        _log_admin_action(settings.db_path, "admin_pin_updated", request)
-    _log_admin_action(settings.db_path, "admin_settings_updated", request)
+        _log_admin_action(
+            settings.db_path,
+            "admin_pin_updated",
+            request,
+            entity="admin_pin",
+            before_state={"pin_configured": pin_configured_before},
+            after_state={"pin_configured": True},
+        )
+    after_settings = {
+        "allowed_mime_types": normalized_mime_types,
+        "retention_days": str(retention_value),
+        "quarantine_retention_days": str(quarantine_retention_value),
+        "allow_html": bool(allow_html),
+    }
+    _log_admin_action(
+        settings.db_path,
+        "admin_settings_updated",
+        request,
+        entity="settings",
+        before_state=before_settings,
+        after_state=after_settings,
+    )
     return RedirectResponse(url="/admin/settings?updated=1", status_code=HTTP_303_SEE_OTHER)
 
 
@@ -900,6 +1043,8 @@ async def admin_domain_policies_post(
                 raise HTTPException(status_code=400, detail="Invalid retention override.")
             return RedirectResponse(url="/admin/settings?domain_error=retention", status_code=303)
     now = _now().isoformat()
+    before_policy = db.get_domain_policy(settings.db_path, normalized_domain)
+    before_state = dict(before_policy) if before_policy else None
     policy = db.upsert_domain_policy(
         settings.db_path,
         normalized_domain,
@@ -908,7 +1053,14 @@ async def admin_domain_policies_post(
         retention_override_value,
         now,
     )
-    _log_admin_action(settings.db_path, f"admin_domain_policy_upsert:{normalized_domain}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_domain_policy_upsert:{normalized_domain}",
+        request,
+        entity=f"domain_policy:{normalized_domain}",
+        before_state=before_state,
+        after_state=dict(policy),
+    )
     if _wants_json(request):
         return JSONResponse({"policy": dict(policy)})
     return RedirectResponse(
@@ -978,7 +1130,14 @@ async def admin_rules_post(
         note.strip() if note else None,
         _now().isoformat(),
     )
-    _log_admin_action(settings.db_path, f"admin_rule_created:{row['id']}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_rule_created:{row['id']}",
+        request,
+        entity=f"address_rule:{row['id']}",
+        before_state=None,
+        after_state=_serialize_rule(row),
+    )
     if _wants_json(request):
         return JSONResponse({"rule": _serialize_rule(row)})
     return RedirectResponse(
@@ -1043,6 +1202,7 @@ async def admin_rules_update(
     existing = db.get_address_rule(settings.db_path, rule_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Rule not found.")
+    before_state = _serialize_rule(existing)
     normalized, error_response = _normalize_rule_fields(
         request,
         rule_type,
@@ -1068,7 +1228,14 @@ async def admin_rules_update(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Rule not found.")
-    _log_admin_action(settings.db_path, f"admin_rule_updated:{rule_id}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_rule_updated:{rule_id}",
+        request,
+        entity=f"address_rule:{rule_id}",
+        before_state=before_state,
+        after_state=_serialize_rule(row),
+    )
     if _wants_json(request):
         return JSONResponse({"rule": _serialize_rule(row)})
     return RedirectResponse(
@@ -1093,10 +1260,18 @@ async def admin_rules_delete(
     existing = db.get_address_rule(settings.db_path, rule_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Rule not found.")
+    before_state = _serialize_rule(existing)
     deleted = db.delete_address_rule(settings.db_path, rule_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Rule not found.")
-    _log_admin_action(settings.db_path, f"admin_rule_deleted:{rule_id}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_rule_deleted:{rule_id}",
+        request,
+        entity=f"address_rule:{rule_id}",
+        before_state=before_state,
+        after_state=None,
+    )
     if _wants_json(request):
         return JSONResponse({"deleted": True, "rule_id": rule_id})
     return RedirectResponse(
@@ -1137,7 +1312,7 @@ async def admin_quarantine(request: Request) -> HTMLResponse:
         start_date,
         end_date,
     )
-    _log_admin_action(settings.db_path, "admin_quarantine_view", request)
+    _log_admin_action(settings.db_path, "admin_quarantine_view", request, entity="quarantine")
     return templates.TemplateResponse(
         "admin_quarantine.html",
         {
@@ -1185,9 +1360,17 @@ async def admin_quarantine_restore(
             ),
             status_code=HTTP_303_SEE_OTHER,
         )
+    before_rows = {row["id"]: row for row in _fetch_messages_by_ids(settings.db_path, message_ids)}
     for message_id_value in message_ids:
         _update_message_status(settings.db_path, message_id_value, "INBOX")
-        _log_admin_action(settings.db_path, f"admin_quarantine_restore:{message_id_value}", request)
+        _log_admin_action(
+            settings.db_path,
+            f"admin_quarantine_restore:{message_id_value}",
+            request,
+            entity=f"message:{message_id_value}",
+            before_state=before_rows.get(message_id_value),
+            after_state={"id": message_id_value, "status": "INBOX"},
+        )
     if _wants_json(request):
         return JSONResponse({"restored": message_ids})
     query = _build_quarantine_query(
@@ -1231,9 +1414,17 @@ async def admin_quarantine_delete(
             ),
             status_code=HTTP_303_SEE_OTHER,
         )
+    before_rows = {row["id"]: row for row in _fetch_messages_by_ids(settings.db_path, message_ids)}
     for message_id_value in message_ids:
         _delete_message(settings.db_path, message_id_value)
-        _log_admin_action(settings.db_path, f"admin_quarantine_delete:{message_id_value}", request)
+        _log_admin_action(
+            settings.db_path,
+            f"admin_quarantine_delete:{message_id_value}",
+            request,
+            entity=f"message:{message_id_value}",
+            before_state=before_rows.get(message_id_value),
+            after_state=None,
+        )
     if _wants_json(request):
         return JSONResponse({"deleted": message_ids})
     query = _build_quarantine_query(
@@ -1327,7 +1518,12 @@ async def admin_quarantine_rule_from_selection(
         )
         created_rules.append(created_rule)
         _log_admin_action(
-            settings.db_path, f"admin_quarantine_rule_created:{created_rule['id']}", request
+            settings.db_path,
+            f"admin_quarantine_rule_created:{created_rule['id']}",
+            request,
+            entity=f"address_rule:{created_rule['id']}",
+            before_state=None,
+            after_state=_serialize_rule(created_rule),
         )
     if not created_rules:
         if _wants_json(request):
@@ -1359,6 +1555,17 @@ async def admin_clear_messages(request: Request) -> RedirectResponse:
     if not _is_admin(request):
         return RedirectResponse(url="/admin/unlock", status_code=303)
     settings = get_settings()
+    with db.get_connection(settings.db_path) as conn:
+        before_count = conn.execute("SELECT COUNT(*) AS count FROM messages").fetchone()[
+            "count"
+        ]
     deleted_count = _delete_all_messages(settings.db_path)
-    _log_admin_action(settings.db_path, f"admin_messages_cleared:{deleted_count}", request)
+    _log_admin_action(
+        settings.db_path,
+        f"admin_messages_cleared:{deleted_count}",
+        request,
+        entity="messages",
+        before_state={"message_count": int(before_count or 0)},
+        after_state={"message_count": 0, "deleted_count": deleted_count},
+    )
     return RedirectResponse(url="/admin/settings?cleared=1", status_code=HTTP_303_SEE_OTHER)
