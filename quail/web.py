@@ -74,7 +74,9 @@ def _init_settings(settings_path: Path) -> None:
     if db.get_setting(settings_path, RETENTION_DAYS_KEY) is None:
         db.set_setting(settings_path, RETENTION_DAYS_KEY, DEFAULT_RETENTION_DAYS)
     if db.get_setting(settings_path, QUARANTINE_RETENTION_DAYS_KEY) is None:
-        db.set_setting(settings_path, QUARANTINE_RETENTION_DAYS_KEY, DEFAULT_QUARANTINE_RETENTION_DAYS)
+        db.set_setting(
+            settings_path, QUARANTINE_RETENTION_DAYS_KEY, DEFAULT_QUARANTINE_RETENTION_DAYS
+        )
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
 
@@ -773,9 +775,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
         or DEFAULT_ALLOWED_MIME_TYPES_VALUE,
         "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
         or DEFAULT_RETENTION_DAYS,
-        "quarantine_retention_days": db.get_setting(
-            settings.db_path, QUARANTINE_RETENTION_DAYS_KEY
-        )
+        "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
         or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
         "message_count": storage_stats["message_count"],
@@ -898,9 +898,7 @@ async def admin_domain_policies_post(
         if not retention_override_value or retention_override_value <= 0:
             if _wants_json(request):
                 raise HTTPException(status_code=400, detail="Invalid retention override.")
-            return RedirectResponse(
-                url="/admin/settings?domain_error=retention", status_code=303
-            )
+            return RedirectResponse(url="/admin/settings?domain_error=retention", status_code=303)
     now = _now().isoformat()
     policy = db.upsert_domain_policy(
         settings.db_path,

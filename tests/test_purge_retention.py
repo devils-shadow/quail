@@ -157,9 +157,7 @@ def test_purge_respects_quarantine_retention_overrides(tmp_path, monkeypatch) ->
     assert purge.main() == 0
 
     with db.get_connection(settings_obj.db_path) as conn:
-        remaining = {
-            row["id"] for row in conn.execute("SELECT id FROM messages").fetchall()
-        }
+        remaining = {row["id"] for row in conn.execute("SELECT id FROM messages").fetchall()}
 
     assert inbox_keep in remaining
     assert quarantine_keep in remaining
@@ -172,6 +170,4 @@ def test_purge_respects_quarantine_retention_overrides(tmp_path, monkeypatch) ->
     assert (settings_obj.eml_dir / "quarantine-expired.eml").exists() is False
     assert (settings_obj.attachment_dir / "quarantine-expired.pdf").exists() is False
     assert (settings_obj.eml_dir / "quarantine-expired-override.eml").exists() is False
-    assert (
-        settings_obj.attachment_dir / "quarantine-expired-override.pdf"
-    ).exists() is False
+    assert (settings_obj.attachment_dir / "quarantine-expired-override.pdf").exists() is False
