@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Admin Settings</h1>
+<p><a href="/admin/quarantine">View quarantine</a></p>
 {% if request.query_params.get("updated") %}
 <p>Settings updated.</p>
 {% endif %}

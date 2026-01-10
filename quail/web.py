@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
+from email.utils import getaddresses
 from pathlib import Path
 import secrets
 from typing import Iterable
@@ -278,6 +279,38 @@ def _wants_json(request: Request) -> bool:
     return "application/json" in accept or "application/*" in accept
 
 
+def _build_quarantine_query(
+    domain: str | None,
+    sender_domain: str | None,
+    recipient_localpart: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> str:
+    params = []
+    for key, value in (
+        ("domain", domain),
+        ("sender_domain", sender_domain),
+        ("recipient_localpart", recipient_localpart),
+        ("start_date", start_date),
+        ("end_date", end_date),
+    ):
+        if value:
+            params.append(f"{key}={quote(value)}")
+    return f"?{'&'.join(params)}" if params else ""
+
+
+async def _extract_message_ids(request: Request) -> list[int]:
+    form = await request.form()
+    raw_values = form.getlist("message_id")
+    message_ids = []
+    for value in raw_values:
+        try:
+            message_ids.append(int(value))
+        except ValueError:
+            continue
+    return message_ids
+
+
 def _require_admin_session(request: Request) -> RedirectResponse | None:
     if _is_admin(request):
         return None
@@ -317,6 +350,105 @@ def _escape_like(value: str) -> str:
 
 def _to_like_pattern(value: str) -> str:
     return _escape_like(value).replace("*", "%")
+
+
+def _extract_primary_address(raw_value: str | None) -> str | None:
+    if not raw_value:
+        return None
+    addresses = getaddresses([raw_value])
+    for _, address in addresses:
+        if address:
+            return address
+    return None
+
+
+def _extract_domain(address: str | None) -> str | None:
+    if not address:
+        return None
+    _, _, domain = address.partition("@")
+    return domain.lower() if domain else None
+
+
+def _split_envelope_rcpt(envelope_rcpt: str) -> tuple[str, str]:
+    localpart, _, domain = envelope_rcpt.partition("@")
+    return localpart, domain.lower()
+
+
+def _parse_date_filter(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    try:
+        date_value = datetime.strptime(cleaned, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return datetime.combine(date_value, datetime.min.time(), tzinfo=timezone.utc)
+
+
+def _iter_quarantine_messages(
+    db_path: Path,
+    domain_filter: str | None,
+    sender_domain_filter: str | None,
+    localpart_filter: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> list[dict[str, str]]:
+    query = """
+        SELECT
+            id,
+            received_at,
+            envelope_rcpt,
+            from_addr,
+            subject,
+            quarantine_reason
+        FROM messages
+        WHERE (status = 'QUARANTINE' OR quarantined = 1)
+        {filters}
+        ORDER BY received_at DESC
+        LIMIT ?
+    """
+    conditions = []
+    params: list[str | int] = []
+    if domain_filter:
+        pattern = f"%@{_escape_like(domain_filter)}"
+        conditions.append("LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'")
+        params.append(pattern.lower())
+    if sender_domain_filter:
+        pattern = f"%@{_escape_like(sender_domain_filter)}%"
+        conditions.append("LOWER(from_addr) LIKE ? ESCAPE '\\'")
+        params.append(pattern.lower())
+    if localpart_filter:
+        pattern = f"{_escape_like(localpart_filter)}@%"
+        conditions.append("LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'")
+        params.append(pattern.lower())
+    if start_date:
+        conditions.append("received_at >= ?")
+        params.append(start_date.isoformat())
+    if end_date:
+        end_bound = end_date + timedelta(days=1)
+        conditions.append("received_at < ?")
+        params.append(end_bound.isoformat())
+    filters = f" AND {' AND '.join(conditions)}" if conditions else ""
+    params.append(MAX_LIST_ROWS)
+    with db.get_connection(db_path) as conn:
+        rows = conn.execute(query.format(filters=filters), params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _fetch_messages_by_ids(db_path: Path, message_ids: list[int]) -> list[dict[str, str]]:
+    if not message_ids:
+        return []
+    placeholders = ",".join(["?"] * len(message_ids))
+    query = f"""
+        SELECT id, envelope_rcpt, from_addr, subject, status, quarantined
+        FROM messages
+        WHERE id IN ({placeholders})
+    """
+    with db.get_connection(db_path) as conn:
+        rows = conn.execute(query, message_ids).fetchall()
+    return [dict(row) for row in rows]
 
 
 def _format_bytes(size_bytes: int) -> str:
@@ -458,6 +590,19 @@ def _delete_all_messages(settings_db_path: Path) -> int:
     for message in messages:
         _delete_path(Path(message["eml_path"]))
     return len(messages)
+
+
+def _update_message_status(settings_db_path: Path, message_id: int, status: str) -> None:
+    with db.get_connection(settings_db_path) as conn:
+        conn.execute(
+            """
+            UPDATE messages
+            SET status = ?, quarantined = ?, quarantine_reason = ?
+            WHERE id = ?
+            """,
+            (status, 0 if status == "INBOX" else 1, None if status == "INBOX" else "", message_id),
+        )
+        conn.commit()
 
 
 def _parse_message_body(
@@ -929,6 +1074,246 @@ async def admin_rules_delete_post(
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
     return await admin_rules_delete(request, rule_id, admin_pin)
+
+
+@app.get("/admin/quarantine", response_class=HTMLResponse)
+async def admin_quarantine(request: Request) -> HTMLResponse:
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    settings = get_settings()
+    domain_filter = _normalize_domain(request.query_params.get("domain"))
+    sender_domain = _normalize_domain(request.query_params.get("sender_domain"))
+    recipient_localpart = request.query_params.get("recipient_localpart")
+    if recipient_localpart:
+        recipient_localpart = recipient_localpart.strip() or None
+        if recipient_localpart and "@" in recipient_localpart:
+            recipient_localpart = None
+    start_date = _parse_date_filter(request.query_params.get("start_date"))
+    end_date = _parse_date_filter(request.query_params.get("end_date"))
+    messages = _iter_quarantine_messages(
+        settings.db_path,
+        domain_filter,
+        sender_domain,
+        recipient_localpart,
+        start_date,
+        end_date,
+    )
+    _log_admin_action(settings.db_path, "admin_quarantine_view", request)
+    return templates.TemplateResponse(
+        "admin_quarantine.html",
+        {
+            "request": request,
+            "messages": messages,
+            "domain_filter": domain_filter or "",
+            "sender_domain_filter": sender_domain or "",
+            "recipient_localpart_filter": recipient_localpart or "",
+            "start_date_filter": request.query_params.get("start_date") or "",
+            "end_date_filter": request.query_params.get("end_date") or "",
+            "match_fields": MATCH_FIELDS,
+        },
+    )
+
+
+@app.post("/admin/quarantine/restore")
+async def admin_quarantine_restore(
+    request: Request,
+    admin_pin: str | None = Form(None),
+    domain: str | None = Form(None),
+    sender_domain: str | None = Form(None),
+    recipient_localpart: str | None = Form(None),
+    start_date: str | None = Form(None),
+    end_date: str | None = Form(None),
+):
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    message_ids = await _extract_message_ids(request)
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    if not message_ids:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="No messages selected.")
+        query = _build_quarantine_query(
+            domain, sender_domain, recipient_localpart, start_date, end_date
+        )
+        return RedirectResponse(
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
+            status_code=HTTP_303_SEE_OTHER,
+        )
+    for message_id_value in message_ids:
+        _update_message_status(settings.db_path, message_id_value, "INBOX")
+        _log_admin_action(settings.db_path, f"admin_quarantine_restore:{message_id_value}", request)
+    if _wants_json(request):
+        return JSONResponse({"restored": message_ids})
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
+    return RedirectResponse(
+        url=f"/admin/quarantine{query}&restored=1" if query else "/admin/quarantine?restored=1",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/admin/quarantine/delete")
+async def admin_quarantine_delete(
+    request: Request,
+    admin_pin: str | None = Form(None),
+    domain: str | None = Form(None),
+    sender_domain: str | None = Form(None),
+    recipient_localpart: str | None = Form(None),
+    start_date: str | None = Form(None),
+    end_date: str | None = Form(None),
+):
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    message_ids = await _extract_message_ids(request)
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    if not message_ids:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="No messages selected.")
+        query = _build_quarantine_query(
+            domain, sender_domain, recipient_localpart, start_date, end_date
+        )
+        return RedirectResponse(
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
+            status_code=HTTP_303_SEE_OTHER,
+        )
+    for message_id_value in message_ids:
+        _delete_message(settings.db_path, message_id_value)
+        _log_admin_action(settings.db_path, f"admin_quarantine_delete:{message_id_value}", request)
+    if _wants_json(request):
+        return JSONResponse({"deleted": message_ids})
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
+    return RedirectResponse(
+        url=f"/admin/quarantine{query}&deleted=1" if query else "/admin/quarantine?deleted=1",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/admin/quarantine/rule-from-selection")
+async def admin_quarantine_rule_from_selection(
+    request: Request,
+    rule_type: str = Form(...),
+    match_field: str = Form(...),
+    admin_pin: str | None = Form(None),
+    domain: str | None = Form(None),
+    sender_domain: str | None = Form(None),
+    recipient_localpart: str | None = Form(None),
+    start_date: str | None = Form(None),
+    end_date: str | None = Form(None),
+):
+    redirect = _require_admin_session(request)
+    if redirect:
+        return redirect
+    message_ids = await _extract_message_ids(request)
+    settings = get_settings()
+    resolved_pin = _get_admin_pin_from_request(request, admin_pin)
+    if not _verify_admin_pin(settings.db_path, resolved_pin):
+        return _reject_admin_pin(request)
+    if not message_ids:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="No messages selected.")
+        query = _build_quarantine_query(
+            domain, sender_domain, recipient_localpart, start_date, end_date
+        )
+        return RedirectResponse(
+            url=(
+                f"/admin/quarantine{query}&error=selection"
+                if query
+                else "/admin/quarantine?error=selection"
+            ),
+            status_code=HTTP_303_SEE_OTHER,
+        )
+    normalized_rule_type = rule_type.strip().upper()
+    if normalized_rule_type not in RULE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid rule type.")
+    normalized_match_field = match_field.strip().upper()
+    if normalized_match_field not in MATCH_FIELDS:
+        raise HTTPException(status_code=400, detail="Invalid match field.")
+    action = "INBOX" if normalized_rule_type == "ALLOW" else "QUARANTINE"
+    rows = _fetch_messages_by_ids(settings.db_path, message_ids)
+    created_rules = []
+    seen = set()
+    now = _now().isoformat()
+    for row in rows:
+        if row.get("status") != "QUARANTINE" and not row.get("quarantined"):
+            continue
+        envelope_rcpt = row.get("envelope_rcpt") or ""
+        localpart, domain_value = _split_envelope_rcpt(envelope_rcpt)
+        if not domain_value:
+            continue
+        raw_from = row.get("from_addr")
+        if normalized_match_field == "RCPT_LOCALPART":
+            match_value = localpart
+        elif normalized_match_field == "MAIL_FROM":
+            match_value = _extract_primary_address(raw_from)
+        elif normalized_match_field == "FROM_DOMAIN":
+            match_value = _extract_domain(_extract_primary_address(raw_from))
+        else:
+            match_value = row.get("subject")
+        if not match_value:
+            continue
+        pattern = f"^{re.escape(match_value)}$"
+        key = (domain_value, normalized_rule_type, normalized_match_field, pattern, action)
+        if key in seen:
+            continue
+        seen.add(key)
+        created_rule = db.create_address_rule(
+            settings.db_path,
+            domain_value,
+            normalized_rule_type,
+            normalized_match_field,
+            pattern,
+            0,
+            action,
+            1,
+            f"Created from quarantine selection (message {row['id']}).",
+            now,
+        )
+        created_rules.append(created_rule)
+        _log_admin_action(
+            settings.db_path, f"admin_quarantine_rule_created:{created_rule['id']}", request
+        )
+    if not created_rules:
+        if _wants_json(request):
+            raise HTTPException(status_code=400, detail="No rules created from selection.")
+        query = _build_quarantine_query(
+            domain, sender_domain, recipient_localpart, start_date, end_date
+        )
+        return RedirectResponse(
+            url=f"/admin/quarantine{query}&error=rule" if query else "/admin/quarantine?error=rule",
+            status_code=HTTP_303_SEE_OTHER,
+        )
+    if _wants_json(request):
+        return JSONResponse({"created_rule_ids": [row["id"] for row in created_rules]})
+    query = _build_quarantine_query(
+        domain, sender_domain, recipient_localpart, start_date, end_date
+    )
+    return RedirectResponse(
+        url=(
+            f"/admin/quarantine{query}&rules_created=1"
+            if query
+            else "/admin/quarantine?rules_created=1"
+        ),
+        status_code=HTTP_303_SEE_OTHER,
+    )
 
 
 @app.post("/admin/messages/clear")
