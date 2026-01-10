@@ -171,3 +171,31 @@ def test_purge_respects_quarantine_retention_overrides(tmp_path, monkeypatch) ->
     assert (settings_obj.attachment_dir / "quarantine-expired.pdf").exists() is False
     assert (settings_obj.eml_dir / "quarantine-expired-override.eml").exists() is False
     assert (settings_obj.attachment_dir / "quarantine-expired-override.pdf").exists() is False
+
+
+def test_purge_removes_expired_admin_actions(tmp_path, monkeypatch) -> None:
+    _configure_settings(tmp_path, monkeypatch)
+    settings_obj = settings.get_settings()
+    db.init_db(settings_obj.db_path)
+    now = datetime.now(tz=timezone.utc)
+
+    db.log_admin_action(
+        settings_obj.db_path,
+        "admin_old_action",
+        "127.0.0.1",
+        (now - timedelta(days=31)).isoformat(),
+    )
+    db.log_admin_action(
+        settings_obj.db_path,
+        "admin_recent_action",
+        "127.0.0.1",
+        (now - timedelta(days=1)).isoformat(),
+    )
+
+    assert purge.main() == 0
+
+    with db.get_connection(settings_obj.db_path) as conn:
+        remaining = [row["action"] for row in conn.execute("SELECT action FROM admin_actions")]
+
+    assert "admin_recent_action" in remaining
+    assert "admin_old_action" not in remaining

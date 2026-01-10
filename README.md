@@ -20,7 +20,8 @@ extracted into the attachment directory, and attachment metadata is stored
 alongside each message.
 The ingest pipeline applies deterministic domain policies and address/content
 rules to mark messages as INBOX, QUARANTINE, or DROP while storing the decision
-metadata in SQLite.
+metadata in SQLite. Each ingest also records a decision log row with the final
+decision, reason, recipient details, and sender domain for operator visibility.
 
 ## Configuration
 
@@ -43,7 +44,8 @@ can also manage per-domain allow/block rules (regex patterns with priorities)
 from the settings page; rule changes apply only to new ingests.
 Admins can configure separate retention windows for inbox and quarantine
 messages, plus optional per-domain quarantine retention overrides in the
-domain policy section.
+domain policy section. The settings page includes ingest visibility metrics
+and a lightweight audit log of admin actions retained for 30 days.
 
 ## HTML rendering
 

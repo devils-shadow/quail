@@ -46,6 +46,10 @@ SCHEMA = [
     CREATE TABLE IF NOT EXISTS admin_actions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         action TEXT NOT NULL,
+        actor TEXT,
+        entity TEXT,
+        before_state TEXT,
+        after_state TEXT,
         source_ip TEXT NOT NULL,
         performed_at TEXT NOT NULL
     )
@@ -83,6 +87,20 @@ SCHEMA = [
         updated_at TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ingest_decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        decision TEXT NOT NULL,
+        reason TEXT,
+        recipient_domain TEXT,
+        recipient_localpart TEXT,
+        sender_domain TEXT,
+        source_ip TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 
@@ -99,6 +117,7 @@ def init_db(db_path: Path) -> None:
         for statement in SCHEMA:
             conn.execute(statement)
         _ensure_message_columns(conn)
+        _ensure_admin_action_columns(conn)
         _ensure_domain_policy_columns(conn)
         conn.commit()
 
@@ -123,6 +142,20 @@ def _ensure_domain_policy_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE domain_policy ADD COLUMN quarantine_retention_days INTEGER")
 
 
+def _ensure_admin_action_columns(conn: sqlite3.Connection) -> None:
+    existing_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(admin_actions)").fetchall()
+    }
+    if "actor" not in existing_columns:
+        conn.execute("ALTER TABLE admin_actions ADD COLUMN actor TEXT")
+    if "entity" not in existing_columns:
+        conn.execute("ALTER TABLE admin_actions ADD COLUMN entity TEXT")
+    if "before_state" not in existing_columns:
+        conn.execute("ALTER TABLE admin_actions ADD COLUMN before_state TEXT")
+    if "after_state" not in existing_columns:
+        conn.execute("ALTER TABLE admin_actions ADD COLUMN after_state TEXT")
+
+
 def get_setting(db_path: Path, key: str) -> str | None:
     with get_connection(db_path) as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -144,11 +177,77 @@ def iter_settings(db_path: Path) -> Iterable[sqlite3.Row]:
         yield from conn.execute("SELECT key, value FROM settings ORDER BY key")
 
 
-def log_admin_action(db_path: Path, action: str, source_ip: str, performed_at: str) -> None:
+def log_admin_action(
+    db_path: Path,
+    action: str,
+    source_ip: str,
+    performed_at: str,
+    actor: str | None = None,
+    entity: str | None = None,
+    before_state: str | None = None,
+    after_state: str | None = None,
+) -> None:
     with get_connection(db_path) as conn:
         conn.execute(
-            "INSERT INTO admin_actions (action, source_ip, performed_at) VALUES (?, ?, ?)",
-            (action, source_ip, performed_at),
+            """
+            INSERT INTO admin_actions (
+                action,
+                actor,
+                entity,
+                before_state,
+                after_state,
+                source_ip,
+                performed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                action,
+                actor,
+                entity,
+                before_state,
+                after_state,
+                source_ip,
+                performed_at,
+            ),
+        )
+        conn.commit()
+
+
+def log_ingest_decision(
+    db_path: Path,
+    message_id: int,
+    decision: str,
+    reason: str | None,
+    recipient_domain: str | None,
+    recipient_localpart: str | None,
+    sender_domain: str | None,
+    source_ip: str | None,
+    created_at: str,
+) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO ingest_decisions (
+                message_id,
+                decision,
+                reason,
+                recipient_domain,
+                recipient_localpart,
+                sender_domain,
+                source_ip,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                message_id,
+                decision,
+                reason,
+                recipient_domain,
+                recipient_localpart,
+                sender_domain,
+                source_ip,
+                created_at,
+            ),
         )
         conn.commit()
 
@@ -195,6 +294,24 @@ def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
             """
         ).fetchall()
     return list(rows)
+
+
+def get_domain_policy(db_path: Path, domain: str) -> sqlite3.Row | None:
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT
+                domain,
+                mode,
+                default_action,
+                quarantine_retention_days,
+                created_at,
+                updated_at
+            FROM domain_policy
+            WHERE domain = ?
+            """,
+            (domain,),
+        ).fetchone()
 
 
 def upsert_domain_policy(

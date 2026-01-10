@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file. This projec
 - Added admin address/content rule CRUD endpoints, validation, and settings UI.
 - Added admin quarantine view with filters and bulk restore/delete/rule creation actions.
 - Added quarantine retention settings with optional per-domain overrides in purge logic.
+- Added ingest decision logging, admin audit detail fields, and ingest visibility metrics in the admin UI.
+- Added purge retention for admin audit entries (30 days).
 - Added pytest to requirements to run the test suite locally.
 
 ## [0.1.0] - 2026-01-09
