@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec /usr/bin/env python3 -m quail.ingest "$@"
+VENV_PYTHON="/opt/quail/venv/bin/python"
+
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+  message="ERROR: ${VENV_PYTHON} not found or not executable; cannot run quail.ingest."
+  echo "${message}" >&2
+  if command -v logger >/dev/null 2>&1; then
+    logger -t quail-ingest "${message}"
+  fi
+  exit 1
+fi
+
+exec "${VENV_PYTHON}" -m quail.ingest "$@"
