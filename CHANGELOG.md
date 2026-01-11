@@ -16,6 +16,10 @@ All notable changes to this project will be documented in this file. This projec
 - Added purge retention for admin audit entries (30 days).
 - Added pytest to requirements to run the test suite locally.
 
+### Fixed
+
+- Ensured Postfix ingest uses the Quail virtual environment interpreter with a clear error when missing.
+
 ## [0.1.0] - 2026-01-09
 
 ### Added
