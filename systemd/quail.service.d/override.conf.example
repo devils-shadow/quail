@@ -1,0 +1,11 @@
+# Example systemd drop-in for Quail.
+# Prefer /etc/quail/config.env for runtime settings.
+# To use this file:
+#   sudo install -d /etc/systemd/system/quail.service.d
+#   sudo cp /opt/quail/systemd/quail.service.d/override.conf.example \
+#     /etc/systemd/system/quail.service.d/override.conf
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart quail.service
+
+[Service]
+Environment="QUAIL_BIND_HOST=0.0.0.0"

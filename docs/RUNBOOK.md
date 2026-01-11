@@ -14,6 +14,17 @@ This runbook provides step‑by‑step instructions for installing, configuring,
    - Install and enable systemd units for the service and purge timer【104907567664902†L190-L199】.
 4. **Verify installation:** Ensure that the `quail.service` and `quail-purge.timer` units are active using `systemctl status`.
 
+### Systemd overrides
+
+- Prefer editing `/etc/quail/config.env` for runtime configuration such as bind
+  host/port values.
+- If you need a systemd override, use `sudo systemctl edit quail` to create
+  `/etc/systemd/system/quail.service.d/override.conf`.
+- An example drop-in lives at `systemd/quail.service.d/override.conf.example`
+  for common overrides (such as bind host); copy it into
+  `/etc/systemd/system/quail.service.d/override.conf` if needed and reload
+  systemd afterwards.
+
 ## Upgrade
 
 To upgrade Quail to a newer version:
