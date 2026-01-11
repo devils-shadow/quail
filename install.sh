@@ -39,6 +39,8 @@ if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
   python3 -m venv "${INSTALL_DIR}/venv"
 fi
 
+chmod 0755 "${INSTALL_DIR}/scripts/quail-ingest"
+
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip
 "${INSTALL_DIR}/venv/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
 

@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file. This projec
 
 - Ensured Postfix ingest uses the Quail virtual environment interpreter with a clear error when missing.
 - Updated Postfix install configuration to use relay domains with transport maps instead of virtual aliases, preserving envelope recipients.
+- Ensured the Postfix ingest pipe sets `PYTHONPATH` so Quail runs from the source tree without packaging.
 
 ## [0.1.0] - 2026-01-09
 
