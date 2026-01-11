@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file. This projec
 ### Fixed
 
 - Ensured Postfix ingest uses the Quail virtual environment interpreter with a clear error when missing.
+- Updated Postfix install configuration to use relay domains with transport maps instead of virtual aliases, preserving envelope recipients.
 
 ## [0.1.0] - 2026-01-09
 
