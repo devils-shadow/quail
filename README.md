@@ -13,8 +13,9 @@ and install/upgrade automation are still stubbed with TODOs.
 ## Ingest
 
 Postfix should pipe messages to `scripts/quail-ingest`, which runs the ingest
-module with the `/opt/quail/venv` interpreter and stores raw `.eml` files plus
-metadata in SQLite.
+module with the `/opt/quail/venv` interpreter. The script also ensures the repo
+root is on `PYTHONPATH` because Quail is executed from the source tree instead
+of an installed package. It stores raw `.eml` files plus metadata in SQLite.
 Oversize messages are rejected at SMTP via Postfix and dropped by the ingest
 pipeline when they exceed the configured maximum size. Allowed attachments are
 extracted into the attachment directory, and attachment metadata is stored
