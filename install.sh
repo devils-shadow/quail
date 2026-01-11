@@ -64,34 +64,34 @@ if command -v postconf >/dev/null 2>&1; then
   quail_domains_string="${quail_domains[*]}"
   max_size_mb="${QUAIL_MAX_MESSAGE_SIZE_MB:-10}"
   max_size_bytes=$((max_size_mb * 1024 * 1024))
-  virtual_alias_domains="$(postconf -h virtual_alias_domains || true)"
-  if [[ -z "${virtual_alias_domains}" ]]; then
-    postconf -e "virtual_alias_domains = ${quail_domains_string}"
+  # NOTE: We intentionally do not use virtual aliasing for Quail domains because
+  # virtual alias rewriting happens before transport lookup and would bypass the
+  # pipe transport needed to preserve the original envelope recipient.
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" =~ ^# ]] && continue
+    key="${line%%=*}"
+    key="$(echo "${key}" | xargs)"
+    current="$(postconf -h "${key}" || true)"
+    if [[ -z "${current}" ]]; then
+      postconf -e "${line}"
+    fi
+  done < "${INSTALL_DIR}/postfix/maincf.snippet"
+
+  relay_domains="$(postconf -h relay_domains || true)"
+  if [[ -z "${relay_domains}" ]]; then
+    postconf -e "relay_domains = ${quail_domains_string}"
   else
     missing_domain=0
     for domain in "${quail_domains[@]}"; do
-      if [[ "${virtual_alias_domains}" != *"${domain}"* ]]; then
+      if [[ "${relay_domains}" != *"${domain}"* ]]; then
         missing_domain=1
         break
       fi
     done
     if [[ ${missing_domain} -eq 1 ]]; then
-      echo "WARNING: virtual_alias_domains is already set; update manually to include ${quail_domains_string}." >&2
+      echo "WARNING: relay_domains is already set; update manually to include ${quail_domains_string}." >&2
     fi
-  fi
-
-  virtual_alias_maps="$(postconf -h virtual_alias_maps || true)"
-  if [[ -z "${virtual_alias_maps}" ]]; then
-    postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-  elif [[ "${virtual_alias_maps}" != *"/etc/postfix/virtual"* ]]; then
-    echo "WARNING: virtual_alias_maps is already set; update manually to include /etc/postfix/virtual." >&2
-  fi
-
-  message_size_limit="$(postconf -h message_size_limit || true)"
-  if [[ -z "${message_size_limit}" ]]; then
-    postconf -e "message_size_limit = ${max_size_bytes}"
-  elif [[ "${message_size_limit}" != "${max_size_bytes}" ]]; then
-    echo "WARNING: message_size_limit is already set; update manually to ${max_size_bytes} bytes." >&2
   fi
 
   transport_maps="$(postconf -h transport_maps || true)"
@@ -100,20 +100,17 @@ if command -v postconf >/dev/null 2>&1; then
   elif [[ "${transport_maps}" != *"/etc/postfix/transport"* ]]; then
     echo "WARNING: transport_maps is already set; update manually to include /etc/postfix/transport." >&2
   fi
+
+  message_size_limit="$(postconf -h message_size_limit || true)"
+  if [[ -z "${message_size_limit}" ]]; then
+    postconf -e "message_size_limit = ${max_size_bytes}"
+  elif [[ "${message_size_limit}" != "${max_size_bytes}" ]]; then
+    echo "WARNING: message_size_limit is already set; update manually to ${max_size_bytes} bytes." >&2
+  fi
 else
   echo "ERROR: postconf not found; ensure postfix is installed." >&2
   exit 1
 fi
-
-if [[ ! -f /etc/postfix/virtual ]]; then
-  printf '%s\n' "# Quail catch-all mapping for Quail domains" > /etc/postfix/virtual
-fi
-for domain in "${quail_domains[@]}"; do
-  entry="@${domain} quail"
-  if ! grep -Fxq "${entry}" /etc/postfix/virtual; then
-    printf '%s\n' "${entry}" >> /etc/postfix/virtual
-  fi
-done
 
 if ! grep -q "^quail\s" /etc/postfix/master.cf; then
   cat "${INSTALL_DIR}/postfix/mastercf_pipe.snippet" >> /etc/postfix/master.cf
@@ -129,7 +126,6 @@ for domain in "${quail_domains[@]}"; do
   fi
 done
 
-postmap /etc/postfix/virtual
 postmap /etc/postfix/transport
 if command -v systemctl >/dev/null 2>&1; then
   systemctl reload postfix || systemctl restart postfix

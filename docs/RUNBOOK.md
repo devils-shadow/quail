@@ -10,7 +10,7 @@ This runbook provides step‑by‑step instructions for installing, configuring,
    - Install necessary OS packages.
    - Create a system user and the `/var/lib/quail/{eml,att}` directories.
    - Create a Python virtual environment and install dependencies.
-   - Install Postfix catch‑all configuration snippets.
+   - Install Postfix relay/transport configuration for the Quail domain.
    - Install and enable systemd units for the service and purge timer【104907567664902†L190-L199】.
 4. **Verify installation:** Ensure that the `quail.service` and `quail-purge.timer` units are active using `systemctl status`.
 
@@ -43,6 +43,8 @@ To upgrade Quail to a newer version:
 ## Troubleshooting
 
 - **Service fails to start:** Check `/var/log/syslog` for errors. Common issues include invalid configuration values or missing directories. Ensure that Postfix is piping messages to `scripts/quail-ingest` as expected【819940561035949†L14-L16】.
-- **Email not ingested:** Verify that Postfix is configured to accept mail for `m.cst.ro` and that the ingest script has execute permission.
+- **Email not ingested:** Verify that Postfix is configured to accept mail for
+  `m.cst.ro` via `relay_domains` and `transport_maps`, and that the ingest
+  script has execute permission.
 - **Admin PIN lost:** Reset the PIN by updating the `admin_pin_hash` in the SQLite settings table. Use a secure Argon2 hash generator.
 - **Attachment quarantined unexpectedly:** Check the allowed MIME types in the settings and adjust as necessary【104907567664902†L71-L78】.

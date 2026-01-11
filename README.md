@@ -30,8 +30,8 @@ Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
 needed. The default bind host in the example config is `127.0.0.1`, so the
 service binds to localhost unless you change it; use a reverse proxy and DNS if
 you need external access. `QUAIL_DOMAINS` controls the comma-separated list of
-domains that `install.sh` registers in Postfix transport maps and catch-all
-aliases (default: `m.cst.ro`).
+domains that `install.sh` registers in Postfix transport maps and relay domains
+(default: `m.cst.ro`).
 
 ## Admin access
 

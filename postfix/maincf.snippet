@@ -1,5 +1,5 @@
 # Quail catch-all transport
-virtual_alias_domains = m.cst.ro
-virtual_alias_maps = hash:/etc/postfix/virtual
+relay_domains = m.cst.ro
+transport_maps = hash:/etc/postfix/transport
 # 10 MB; keep in sync with QUAIL_MAX_MESSAGE_SIZE_MB if customized.
 message_size_limit = 10485760
