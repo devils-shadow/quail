@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - depends on optional dependency
     CSSSanitizer = None
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.status import HTTP_303_SEE_OTHER
 
@@ -634,7 +634,7 @@ def _get_message_attachments(db_path: Path, message_id: int) -> list[dict[str, s
     with db.get_connection(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT filename, stored_path, content_type, size_bytes
+            SELECT id, filename, stored_path, content_type, size_bytes
             FROM attachments
             WHERE message_id = ?
             """,
@@ -820,28 +820,15 @@ def _update_message_status(settings_db_path: Path, message_id: int, status: str)
         conn.commit()
 
 
-def _parse_message_body(
-    eml_path: Path, allow_html: bool
-) -> tuple[str, list[dict[str, str]], str | None]:
+def _parse_message_body(eml_path: Path, allow_html: bool) -> tuple[str, str | None]:
     raw_bytes = eml_path.read_bytes()
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     body = ""
     html_body: str | None = None
-    attachments: list[dict[str, str]] = []
     for part in message.walk():
         disposition = part.get_content_disposition()
         filename = part.get_filename()
-        content_type = part.get_content_type()
-        payload = part.get_payload(decode=True)
-        size = len(payload) if payload else 0
         if disposition == "attachment" or filename:
-            attachments.append(
-                {
-                    "filename": filename or "unnamed",
-                    "content_type": content_type,
-                    "size": str(size),
-                }
-            )
             continue
         if not body and part.get_content_type() == "text/plain":
             body = part.get_content()
@@ -849,7 +836,7 @@ def _parse_message_body(
             html_body = part.get_content()
     if not body:
         body = "(No plaintext body found.)"
-    return body, attachments, html_body
+    return body, html_body
 
 
 @app.on_event("startup")
@@ -926,7 +913,8 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Message not found.")
     allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
     allow_rich_html = db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true"
-    body, attachments, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
+    body, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
+    attachments = _get_message_attachments(settings.db_path, message_id)
     sanitized_html = (
         _sanitize_html(html_body, rich=allow_rich_html) if allow_html and html_body else None
     )
@@ -943,6 +931,33 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "allow_rich_html": allow_rich_html,
             "current_inbox": request.query_params.get("inbox") or "",
         },
+    )
+
+
+@app.get("/message/{message_id}/attachments/{attachment_id}")
+async def attachment_download(
+    request: Request, message_id: int, attachment_id: int
+) -> FileResponse:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    message = _get_message(settings.db_path, message_id)
+    if message["quarantined"] and not is_admin:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT filename, stored_path, content_type
+            FROM attachments
+            WHERE id = ? AND message_id = ?
+            """,
+            (attachment_id, message_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Attachment not found.")
+    return FileResponse(
+        row["stored_path"],
+        media_type=row["content_type"],
+        filename=row["filename"],
     )
 
 
