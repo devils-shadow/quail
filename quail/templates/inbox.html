@@ -73,10 +73,24 @@
 <script>
   const hiddenKey = "quailHiddenMessages";
   const pauseKey = "quailInboxPaused";
-  const rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
-  const emptyRow = document.querySelector("[data-empty-state]");
+  const refreshIntervalMs = 3000;
+  const inboxQuery =
+    "{% if current_inbox %}?inbox={{ current_inbox | urlencode }}{% endif %}";
+  const inboxApiUrl = `/api/inbox${inboxQuery}`;
+  const isAdmin = {{ "true" if is_admin else "false" }};
+  const tableBody = document.querySelector(".table tbody");
+  let rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
+  let emptyRow = document.querySelector("[data-empty-state]");
   const trashButton = document.getElementById("trash-button");
   const pauseButton = document.getElementById("pause-button");
+  let refreshTimer = null;
+  let refreshInFlight = false;
+  let lastEtag = null;
+
+  const resetRows = () => {
+    rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
+    emptyRow = document.querySelector("[data-empty-state]");
+  };
 
   const readHidden = () => {
     try {
@@ -113,6 +127,121 @@
       }
     });
     updateEmptyState();
+  };
+
+  const buildEmptyRow = () => {
+    const row = document.createElement("tr");
+    row.dataset.emptyState = "true";
+    const cell = document.createElement("td");
+    cell.colSpan = 3;
+    const emptyState = document.createElement("div");
+    emptyState.className = "empty-state";
+    emptyState.textContent = "This inbox is currently empty.";
+    cell.appendChild(emptyState);
+    row.appendChild(cell);
+    return row;
+  };
+
+  const buildMessageRow = (message) => {
+    const row = document.createElement("tr");
+    row.dataset.messageId = message.id;
+
+    const fromCell = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.className = "message-select";
+    checkbox.type = "checkbox";
+    checkbox.setAttribute("aria-label", "Select message");
+    fromCell.appendChild(checkbox);
+    const fromText = document.createTextNode(
+      ` ${message.from_addr || "Unknown"}`
+    );
+    fromCell.appendChild(fromText);
+    if (isAdmin && message.quarantined) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "Quarantined";
+      fromCell.appendChild(badge);
+    }
+
+    const subjectCell = document.createElement("td");
+    const link = document.createElement("a");
+    link.href = `/message/${message.id}${inboxQuery}`;
+    link.textContent = message.subject || "(No subject)";
+    subjectCell.appendChild(link);
+    const muted = document.createElement("div");
+    muted.className = "row-muted";
+    muted.textContent = message.envelope_rcpt || "";
+    subjectCell.appendChild(muted);
+
+    const receivedCell = document.createElement("td");
+    receivedCell.textContent = message.received_at || "";
+
+    row.appendChild(fromCell);
+    row.appendChild(subjectCell);
+    row.appendChild(receivedCell);
+    return row;
+  };
+
+  const renderMessages = (messages) => {
+    if (!tableBody) {
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    messages.forEach((message) => {
+      fragment.appendChild(buildMessageRow(message));
+    });
+    const emptyStateRow = buildEmptyRow();
+    emptyStateRow.style.display = messages.length ? "none" : "table-row";
+    fragment.appendChild(emptyStateRow);
+    tableBody.replaceChildren(fragment);
+    resetRows();
+    applyHidden();
+  };
+
+  const hasSameMessages = (messages) => {
+    if (rows.length !== messages.length) {
+      return false;
+    }
+    return rows.every((row, index) => row.dataset.messageId == messages[index].id);
+  };
+
+  const refreshInbox = async () => {
+    if (refreshInFlight || document.hidden) {
+      return;
+    }
+    const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
+    if (isPaused) {
+      return;
+    }
+    refreshInFlight = true;
+    try {
+      const headers = {};
+      if (lastEtag) {
+        headers["If-None-Match"] = lastEtag;
+      }
+      const response = await fetch(inboxApiUrl, { cache: "no-store", headers });
+      if (response.status === 304) {
+        return;
+      }
+      if (!response.ok) {
+        return;
+      }
+      const nextEtag = response.headers.get("ETag");
+      if (nextEtag) {
+        lastEtag = nextEtag;
+      }
+      const payload = await response.json();
+      if (!payload || !Array.isArray(payload.messages)) {
+        return;
+      }
+      if (!hasSameMessages(payload.messages)) {
+        renderMessages(payload.messages);
+      }
+    } catch (error) {
+      // Ignore refresh errors.
+    } finally {
+      refreshInFlight = false;
+    }
   };
 
   const updatePauseButton = () => {
@@ -163,6 +292,10 @@
       updatePauseButton();
     });
     updatePauseButton();
+  }
+
+  if (refreshIntervalMs > 0) {
+    refreshTimer = window.setInterval(refreshInbox, refreshIntervalMs);
   }
 
   applyHidden();

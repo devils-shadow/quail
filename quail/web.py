@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
 from collections import Counter
@@ -17,7 +18,7 @@ from urllib.parse import quote
 
 import bleach
 from argon2.exceptions import InvalidHash, VerifyMismatchError
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.status import HTTP_303_SEE_OTHER
@@ -748,6 +749,41 @@ async def inbox(request: Request) -> HTMLResponse:
             "current_inbox": inbox_filter or "",
         },
     )
+
+
+@app.get("/api/inbox", response_class=JSONResponse)
+async def inbox_api(request: Request) -> JSONResponse:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    inbox_filter = request.query_params.get("inbox")
+    if inbox_filter:
+        inbox_filter = inbox_filter.strip() or None
+    messages = _iter_messages(
+        settings.db_path, include_quarantined=is_admin, inbox_filter=inbox_filter
+    )
+    etag_source = json.dumps(
+        {
+            "is_admin": is_admin,
+            "inbox_filter": inbox_filter or "",
+            "messages": [
+                {
+                    "id": message.get("id"),
+                    "received_at": message.get("received_at"),
+                    "from_addr": message.get("from_addr"),
+                    "subject": message.get("subject"),
+                    "envelope_rcpt": message.get("envelope_rcpt"),
+                    "quarantined": message.get("quarantined"),
+                }
+                for message in messages
+            ],
+        },
+        sort_keys=True,
+        default=str,
+    )
+    etag = f"\"{hashlib.sha256(etag_source.encode('utf-8')).hexdigest()}\""
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return JSONResponse({"messages": messages, "is_admin": is_admin}, headers={"ETag": etag})
 
 
 @app.get("/message/{message_id}", response_class=HTMLResponse)
