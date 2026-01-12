@@ -92,7 +92,11 @@
         padding: 32px 18px;
         display: flex;
         flex-direction: column;
-        gap: 24px;
+        gap: 12px;
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        height: 100vh;
       }
 
       .sidebar-title {
@@ -160,7 +164,6 @@
         box-shadow: 0 0 0 1px var(--border);
         font-weight: 600;
         color: var(--text);
-        margin-top: auto;
       }
 
       .sidebar-settings::before {
@@ -170,7 +173,7 @@
 
       .main-content {
         flex: 1;
-        padding: 32px 40px 48px;
+        padding: 24px 40px 48px;
       }
 
       .page-header {
@@ -714,6 +717,7 @@
     <div class="app-shell">
       {% if show_sidebar | default(true) %}
       <aside class="sidebar">
+        <a class="sidebar-settings" href="/admin/unlock">Settings</a>
         <div class="sidebar-card">
           <div class="sidebar-title">
             <span>✉️</span>
@@ -722,7 +726,6 @@
           <ul class="sidebar-list" id="recent-inboxes"></ul>
           <p class="sidebar-empty" id="recent-inboxes-empty">No recent filters yet.</p>
         </div>
-        <a class="sidebar-settings" href="/admin/unlock">Settings</a>
       </aside>
       {% endif %}
       <main class="main-content">{% block content %}{% endblock %}</main>
