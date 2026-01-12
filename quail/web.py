@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - depends on optional dependency
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.status import HTTP_303_SEE_OTHER
 
@@ -62,10 +63,13 @@ ADMIN_PIN_MAX_LEN = 9
 ADMIN_PIN_MIN_LEN = 4
 MAX_LIST_ROWS = 200
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+BASE_DIR = Path(__file__).parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 LOGGER = logging.getLogger(__name__)
 
 

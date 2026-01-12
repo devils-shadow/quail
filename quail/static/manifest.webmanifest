@@ -1,0 +1,20 @@
+{
+  "name": "Quail",
+  "short_name": "Quail",
+  "icons": [
+    {
+      "src": "/static/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#1f5eff",
+  "background_color": "#f5f7fb",
+  "display": "standalone",
+  "start_url": "/"
+}
