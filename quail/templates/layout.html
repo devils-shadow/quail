@@ -494,6 +494,9 @@
         height: 36px;
         padding: 0 14px;
         font-size: 14px;
+        line-height: 1;
+        font-weight: 600;
+        font-family: inherit;
       }
 
       .message-details__summary::-webkit-details-marker {
@@ -518,18 +521,20 @@
       }
 
       .tab {
-        padding: 14px 0;
+        padding: 15px 0 13px;
         font-weight: 600;
         color: var(--muted);
         background: none;
         border: none;
+        border-bottom: 3px solid transparent;
         cursor: pointer;
+        text-align: center;
       }
 
       .tab.active,
       .tab[aria-selected="true"] {
         color: var(--primary);
-        border-bottom: 3px solid var(--primary);
+        border-bottom-color: var(--primary);
       }
 
       .message-body {
@@ -613,6 +618,10 @@
         border: 0;
         display: block;
         background: transparent;
+      }
+
+      .message-html-frame[data-fitted="true"] {
+        min-height: 0;
       }
 
       .theme-toggle {
@@ -809,6 +818,31 @@
       };
 
       initTabs();
+
+      const fitMessageIframe = () => {
+        const container = document.querySelector("[data-message-tabs]");
+        if (!container) {
+          return;
+        }
+        const iframe = container.querySelector(".message-html-frame");
+        if (!iframe) {
+          return;
+        }
+        const top = container.getBoundingClientRect().top;
+        const maxHeight = window.innerHeight - top - 24;
+        if (maxHeight <= 200) {
+          return;
+        }
+        iframe.style.height = `${Math.floor(maxHeight)}px`;
+        iframe.dataset.fitted = "true";
+      };
+
+      const scheduleFit = () => {
+        window.requestAnimationFrame(fitMessageIframe);
+      };
+
+      scheduleFit();
+      window.addEventListener("resize", scheduleFit);
     </script>
   </body>
 </html>
