@@ -305,9 +305,64 @@
         padding: 24px 20px 32px;
       }
 
+      .message-html {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: var(--text);
+        word-break: break-word;
+      }
+
+      .message-html * {
+        max-width: 100%;
+      }
+
+      .message-html p,
+      .message-html div,
+      .message-html ul,
+      .message-html ol,
+      .message-html table,
+      .message-html blockquote,
+      .message-html pre,
+      .message-html h1,
+      .message-html h2,
+      .message-html h3,
+      .message-html h4,
+      .message-html h5,
+      .message-html h6 {
+        margin: 0 0 1em;
+      }
+
+      .message-html table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      .message-html td,
+      .message-html th {
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        text-align: left;
+      }
+
+      .message-html a {
+        color: var(--primary);
+      }
+
       .message-body pre {
         white-space: pre-wrap;
         font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      .message-plaintext {
+        margin-top: 16px;
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+
+      .message-plaintext summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
       }
 
       .empty-state {

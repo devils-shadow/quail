@@ -48,7 +48,7 @@
 <div class="card">
   <div class="tabs">
     {% if allow_html and html_body %}
-    <div class="tab active">HTML</div>
+    <div class="tab active">HTML{% if allow_rich_html %} (Rich){% endif %}</div>
     <div class="tab">TEXT</div>
     {% else %}
     <div class="tab active">TEXT</div>
@@ -57,9 +57,11 @@
   </div>
   <div class="message-body">
     {% if allow_html and html_body %}
-    <div class="message-html">{{ html_body | safe }}</div>
-    <hr />
-    <pre>{{ body }}</pre>
+    <div class="message-html{% if allow_rich_html %} message-html--rich{% endif %}">{{ html_body | safe }}</div>
+    <details class="message-plaintext">
+      <summary>Plaintext fallback</summary>
+      <pre>{{ body }}</pre>
+    </details>
     {% else %}
     <pre>{{ body }}</pre>
     {% endif %}

@@ -17,6 +17,7 @@ from typing import Iterable
 from urllib.parse import quote
 
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -41,10 +42,12 @@ ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
 QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
 ALLOW_HTML_KEY = "allow_html"
+ALLOW_RICH_HTML_KEY = "allow_rich_html"
 DEFAULT_ALLOWED_MIME_TYPES_VALUE = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
 DEFAULT_RETENTION_DAYS = "30"
 DEFAULT_QUARANTINE_RETENTION_DAYS = "3"
 DEFAULT_ALLOW_HTML = "false"
+DEFAULT_ALLOW_RICH_HTML = "false"
 ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
 ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
@@ -82,6 +85,8 @@ def _init_settings(settings_path: Path) -> None:
         )
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
+    if db.get_setting(settings_path, ALLOW_RICH_HTML_KEY) is None:
+        db.set_setting(settings_path, ALLOW_RICH_HTML_KEY, DEFAULT_ALLOW_RICH_HTML)
 
 
 def _get_admin_pin_hash(settings_db_path: Path) -> str | None:
@@ -619,27 +624,126 @@ def _get_message_attachments(db_path: Path, message_id: int) -> list[dict[str, s
     return [dict(row) for row in rows]
 
 
-def _sanitize_html(html_body: str) -> str:
-    allowed_tags = [
-        "a",
-        "p",
-        "br",
-        "strong",
-        "em",
-        "ul",
-        "ol",
-        "li",
-        "blockquote",
-        "code",
-        "pre",
+_HTML_BLOCK_RE = re.compile(r"(?is)<(script|style|head|title|meta|link)[^>]*>.*?</\1>")
+_HTML_SINGLE_TAG_RE = re.compile(r"(?is)<(meta|link)(?:\\s[^>]*)?>")
+
+_MINIMAL_ALLOWED_TAGS = [
+    "a",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+]
+_RICH_ALLOWED_TAGS = [
+    "a",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "div",
+    "span",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "td",
+    "th",
+    "hr",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+]
+_RICH_CSS_SANITIZER = CSSSanitizer(
+    allowed_css_properties=[
+        "color",
+        "background-color",
+        "font-family",
+        "font-size",
+        "font-weight",
+        "font-style",
+        "text-decoration",
+        "text-align",
+        "line-height",
+        "letter-spacing",
+        "margin",
+        "margin-left",
+        "margin-right",
+        "margin-top",
+        "margin-bottom",
+        "padding",
+        "padding-left",
+        "padding-right",
+        "padding-top",
+        "padding-bottom",
+        "border",
+        "border-top",
+        "border-right",
+        "border-bottom",
+        "border-left",
+        "border-collapse",
+        "border-spacing",
+        "width",
+        "max-width",
+        "min-width",
+        "height",
+        "max-height",
+        "min-height",
+        "display",
+        "vertical-align",
+        "white-space",
     ]
-    allowed_attributes = {
-        "a": ["href", "title", "rel"],
-    }
+)
+
+
+def _strip_html_blocks(html_body: str) -> str:
+    cleaned = _HTML_BLOCK_RE.sub("", html_body)
+    cleaned = _HTML_SINGLE_TAG_RE.sub("", cleaned)
+    return cleaned
+
+
+def _rich_attribute_filter(tag: str, name: str, value: str) -> bool:
+    if tag == "a" and name in ("href", "title", "rel", "target"):
+        return True
+    if tag in ("td", "th") and name in ("colspan", "rowspan"):
+        return True
+    if tag in ("table", "td", "th") and name in ("width", "height", "align", "valign", "border"):
+        return True
+    if name == "style":
+        return True
+    return False
+
+
+def _sanitize_html(html_body: str, rich: bool) -> str:
+    cleaned = _strip_html_blocks(html_body)
+    if rich:
+        return bleach.clean(
+            cleaned,
+            tags=_RICH_ALLOWED_TAGS,
+            attributes=_rich_attribute_filter,
+            protocols=["http", "https", "mailto"],
+            strip=True,
+            css_sanitizer=_RICH_CSS_SANITIZER,
+        )
     return bleach.clean(
-        html_body,
-        tags=allowed_tags,
-        attributes=allowed_attributes,
+        cleaned,
+        tags=_MINIMAL_ALLOWED_TAGS,
+        attributes={"a": ["href", "title", "rel"]},
         protocols=["http", "https", "mailto"],
         strip=True,
     )
@@ -794,8 +898,11 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
     allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
+    allow_rich_html = db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true"
     body, attachments, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
-    sanitized_html = _sanitize_html(html_body) if allow_html and html_body else None
+    sanitized_html = (
+        _sanitize_html(html_body, rich=allow_rich_html) if allow_html and html_body else None
+    )
     return templates.TemplateResponse(
         "message.html",
         {
@@ -806,6 +913,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "attachments": attachments,
             "is_admin": is_admin,
             "allow_html": allow_html,
+            "allow_rich_html": allow_rich_html,
             "current_inbox": request.query_params.get("inbox") or "",
         },
     )
@@ -921,6 +1029,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
         or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
+        "allow_rich_html": db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true",
         "message_count": storage_stats["message_count"],
         "message_bytes": _format_bytes(storage_stats["message_bytes"]),
         "attachment_bytes": _format_bytes(storage_stats["attachment_bytes"]),
@@ -952,6 +1061,7 @@ async def admin_settings_post(
     retention_days: str = Form(""),
     quarantine_retention_days: str = Form(""),
     allow_html: str | None = Form(None),
+    allow_rich_html: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
     redirect = _require_admin_session(request)
@@ -967,6 +1077,7 @@ async def admin_settings_post(
         "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
         or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
+        "allow_rich_html": db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true",
     }
     pin_configured_before = bool(_get_admin_pin_hash(settings.db_path))
     try:
@@ -997,6 +1108,7 @@ async def admin_settings_post(
         str(quarantine_retention_value),
     )
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
+    db.set_setting(settings.db_path, ALLOW_RICH_HTML_KEY, "true" if allow_rich_html else "false")
     if admin_pin:
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
         _log_admin_action(
@@ -1012,6 +1124,7 @@ async def admin_settings_post(
         "retention_days": str(retention_value),
         "quarantine_retention_days": str(quarantine_retention_value),
         "allow_html": bool(allow_html),
+        "allow_rich_html": bool(allow_rich_html),
     }
     _log_admin_action(
         settings.db_path,
