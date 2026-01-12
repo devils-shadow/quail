@@ -55,6 +55,8 @@ ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
 ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
 ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+ADMIN_PIN_MAX_LEN = 9
+ADMIN_PIN_MIN_LEN = 4
 MAX_LIST_ROWS = 200
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -365,6 +367,10 @@ def _require_admin_session(request: Request) -> RedirectResponse | None:
 def _verify_admin_pin(db_path: Path, admin_pin: str | None) -> bool:
     if not admin_pin:
         return False
+    if len(admin_pin) > ADMIN_PIN_MAX_LEN or len(admin_pin) < ADMIN_PIN_MIN_LEN:
+        return False
+    if not admin_pin.isdigit():
+        return False
     stored_hash = _get_admin_pin_hash(db_path)
     if not stored_hash:
         return False
@@ -393,6 +399,19 @@ def _escape_like(value: str) -> str:
 
 def _to_like_pattern(value: str) -> str:
     return _escape_like(value).replace("*", "%")
+
+
+def _build_inbox_filter_condition(inbox_filter: str) -> tuple[str, str]:
+    cleaned = inbox_filter.strip().lower()
+    if "@" in cleaned:
+        if "*" in cleaned:
+            return "LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'", _to_like_pattern(cleaned)
+        return "LOWER(envelope_rcpt) = ?", cleaned
+    if "*" in cleaned:
+        local_pattern = _to_like_pattern(cleaned)
+    else:
+        local_pattern = f"%{_escape_like(cleaned)}%"
+    return "LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'", f"{local_pattern}@%"
 
 
 def _extract_primary_address(raw_value: str | None) -> str | None:
@@ -585,12 +604,9 @@ def _iter_messages(
     if not include_quarantined:
         conditions.append("quarantined = 0")
     if inbox_filter:
-        if "*" in inbox_filter:
-            conditions.append("envelope_rcpt LIKE ? ESCAPE '\\'")
-            params.append(_to_like_pattern(inbox_filter))
-        else:
-            conditions.append("envelope_rcpt = ?")
-            params.append(inbox_filter)
+        condition, value = _build_inbox_filter_condition(inbox_filter)
+        conditions.append(condition)
+        params.append(value)
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.append(MAX_LIST_ROWS)
     with db.get_connection(db_path) as conn:
@@ -975,6 +991,10 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
     now = _now()
     if _is_rate_limited(settings.db_path, source_ip, now):
         return RedirectResponse(url="/admin/unlock?error=rate_limited", status_code=303)
+    if len(pin) > ADMIN_PIN_MAX_LEN or len(pin) < ADMIN_PIN_MIN_LEN:
+        return RedirectResponse(url="/admin/unlock?error=pin_length", status_code=303)
+    if not pin.isdigit():
+        return RedirectResponse(url="/admin/unlock?error=pin_format", status_code=303)
 
     stored_hash = _get_admin_pin_hash(settings.db_path)
     pin_configured = bool(stored_hash)
@@ -1121,6 +1141,14 @@ async def admin_settings_post(
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
     db.set_setting(settings.db_path, ALLOW_RICH_HTML_KEY, "true" if allow_rich_html else "false")
     if admin_pin:
+        if len(admin_pin) > ADMIN_PIN_MAX_LEN or len(admin_pin) < ADMIN_PIN_MIN_LEN:
+            return RedirectResponse(
+                url="/admin/settings?error=pin_length", status_code=HTTP_303_SEE_OTHER
+            )
+        if not admin_pin.isdigit():
+            return RedirectResponse(
+                url="/admin/settings?error=pin_format", status_code=HTTP_303_SEE_OTHER
+            )
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
         _log_admin_action(
             settings.db_path,

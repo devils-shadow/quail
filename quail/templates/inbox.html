@@ -3,6 +3,11 @@
 <div class="page-header">
   <h1 class="page-title">Public Messages</h1>
   <div class="toolbar">
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
+      <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
+      <span class="theme-toggle__thumb" aria-hidden="true"></span>
+      <span class="theme-toggle__icon theme-toggle__icon--moon">🌚</span>
+    </button>
     <form method="get" action="/inbox">
       <input
         class="input"
@@ -23,12 +28,12 @@
 </div>
 
 <div class="card">
-  <table class="table">
+  <table class="table inbox-table">
     <thead>
       <tr>
-        <th>From</th>
-        <th>Subject</th>
-        <th>Received</th>
+        <th class="from-col">From</th>
+        <th class="subject-col">Subject</th>
+        <th class="received-col">Received</th>
       </tr>
     </thead>
     <tbody>
@@ -38,21 +43,26 @@
       {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
       {% endif %}
       {% for message in messages %}
-      <tr data-message-id="{{ message.id }}">
-        <td>
+      {% set from_display = message.from_addr or "Unknown" %}
+      {% if "<" in from_display %}
+      {% set from_display = from_display.split("<")[0].strip().strip('"') %}
+      {% elif "@" in from_display %}
+      {% set from_display = from_display.split("@")[0] %}
+      {% endif %}
+      <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
+        <td class="from-col">
           <input class="message-select" type="checkbox" aria-label="Select message" />
-          {{ message.from_addr or "Unknown" }}
+          {{ from_display }}
           {% if is_admin and message.quarantined %}
           <span class="badge">Quarantined</span>
           {% endif %}
         </td>
-        <td>
+        <td class="subject-col">
           <a href="/message/{{ message.id }}{{ inbox_query }}">
             {{ message.subject or "(No subject)" }}
           </a>
-          <div class="row-muted">{{ message.envelope_rcpt }}</div>
         </td>
-        <td>{{ message.received_at }}</td>
+        <td class="received-col received-cell" data-received-at="{{ message.received_at }}">{{ message.received_at }}</td>
       </tr>
       {% endfor %}
       <tr data-empty-state style="display: none;">
@@ -72,6 +82,7 @@
 </div>
 <script>
   const hiddenKey = "quailHiddenMessages";
+  const themeStorageKey = "quailTheme";
   const pauseKey = "quailInboxPaused";
   const refreshIntervalMs = 3000;
   const inboxQuery =
@@ -145,15 +156,35 @@
   const buildMessageRow = (message) => {
     const row = document.createElement("tr");
     row.dataset.messageId = message.id;
+    row.dataset.href = `/message/${message.id}${inboxQuery}`;
+
+    const formatFrom = (rawValue) => {
+      if (!rawValue) {
+        return "Unknown";
+      }
+      const trimmed = String(rawValue).trim();
+      if (!trimmed) {
+        return "Unknown";
+      }
+      if (trimmed.includes("<")) {
+        return trimmed.split("<")[0].replace(/"/g, "").trim() || "Unknown";
+      }
+      if (trimmed.includes("@")) {
+        const localPart = trimmed.split("@")[0].trim();
+        return localPart || "Unknown";
+      }
+      return trimmed;
+    };
 
     const fromCell = document.createElement("td");
+    fromCell.className = "from-col";
     const checkbox = document.createElement("input");
     checkbox.className = "message-select";
     checkbox.type = "checkbox";
     checkbox.setAttribute("aria-label", "Select message");
     fromCell.appendChild(checkbox);
     const fromText = document.createTextNode(
-      ` ${message.from_addr || "Unknown"}`
+      ` ${formatFrom(message.from_addr)}`
     );
     fromCell.appendChild(fromText);
     if (isAdmin && message.quarantined) {
@@ -164,17 +195,23 @@
     }
 
     const subjectCell = document.createElement("td");
+    subjectCell.className = "subject-col";
     const link = document.createElement("a");
     link.href = `/message/${message.id}${inboxQuery}`;
     link.textContent = message.subject || "(No subject)";
     subjectCell.appendChild(link);
-    const muted = document.createElement("div");
-    muted.className = "row-muted";
-    muted.textContent = message.envelope_rcpt || "";
-    subjectCell.appendChild(muted);
 
     const receivedCell = document.createElement("td");
-    receivedCell.textContent = message.received_at || "";
+    receivedCell.className = "received-col received-cell";
+    receivedCell.className = "received-cell";
+    receivedCell.dataset.receivedAt = message.received_at || "";
+    receivedCell.textContent = formatReceivedAt(message.received_at || "");
+    const parsedReceived = message.received_at
+      ? parseReceivedDate(message.received_at)
+      : null;
+    if (parsedReceived) {
+      receivedCell.title = formatAbsoluteTimestamp(parsedReceived);
+    }
 
     row.appendChild(fromCell);
     row.appendChild(subjectCell);
@@ -198,6 +235,66 @@
     applyHidden();
   };
 
+  const pad2 = (value) => String(value).padStart(2, "0");
+
+  const formatAbsoluteTimestamp = (date) =>
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(
+      date.getSeconds()
+    )} ${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
+
+  const parseReceivedDate = (rawValue) => {
+    const parsed = new Date(rawValue);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatReceivedAt = (rawValue) => {
+    if (!rawValue) {
+      return "";
+    }
+    const parsed = parseReceivedDate(rawValue);
+    if (!parsed) {
+      return rawValue;
+    }
+    const now = new Date();
+    const diffMs = now.getTime() - parsed.getTime();
+    if (diffMs < 0) {
+      return formatAbsoluteTimestamp(parsed);
+    }
+    const seconds = Math.floor(diffMs / 1000);
+    if (seconds < 45) {
+      return "just now";
+    }
+    if (seconds < 90) {
+      return "1 minute ago";
+    }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes} minutes ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+    }
+    const days = Math.floor(hours / 24);
+    if (days < 7) {
+      return `${days} ${days === 1 ? "day" : "days"} ago`;
+    }
+    return formatAbsoluteTimestamp(parsed);
+  };
+
+  const applyReceivedFormatting = () => {
+    const cells = document.querySelectorAll(".received-cell[data-received-at]");
+    cells.forEach((cell) => {
+      const rawValue = cell.dataset.receivedAt;
+      const formatted = formatReceivedAt(rawValue);
+      cell.textContent = formatted;
+      const parsed = rawValue ? parseReceivedDate(rawValue) : null;
+      if (parsed) {
+        cell.title = formatAbsoluteTimestamp(parsed);
+      }
+    });
+  };
+
   const hasSameMessages = (messages) => {
     if (rows.length !== messages.length) {
       return false;
@@ -205,12 +302,39 @@
     return rows.every((row, index) => row.dataset.messageId == messages[index].id);
   };
 
+  const isPaused = () => window.sessionStorage.getItem(pauseKey) === "true";
+
+  const setTheme = (theme) => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      window.localStorage.setItem(themeStorageKey, theme);
+    } catch (error) {
+      // Ignore storage errors.
+    }
+  };
+
+  const getTheme = () => {
+    const stored = window.localStorage.getItem(themeStorageKey);
+    return stored || document.documentElement.dataset.theme || "light";
+  };
+
+  const updateThemeToggle = () => {
+    const toggle = document.getElementById("theme-toggle");
+    if (!toggle) {
+      return;
+    }
+    const theme = getTheme();
+    const isDark = theme === "dark";
+    toggle.setAttribute("aria-pressed", isDark ? "true" : "false");
+    toggle.setAttribute("title", isDark ? "Switch to light mode" : "Switch to dark mode");
+  };
+
   const refreshInbox = async () => {
     if (refreshInFlight || document.hidden) {
       return;
     }
-    const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
-    if (isPaused) {
+    if (isPaused()) {
       return;
     }
     refreshInFlight = true;
@@ -231,6 +355,9 @@
         lastEtag = nextEtag;
       }
       const payload = await response.json();
+      if (isPaused()) {
+        return;
+      }
       if (!payload || !Array.isArray(payload.messages)) {
         return;
       }
@@ -248,15 +375,16 @@
     if (!pauseButton) {
       return;
     }
-    const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
-    pauseButton.classList.toggle("paused", isPaused);
+    const paused = isPaused();
+    pauseButton.classList.toggle("paused", paused);
+    pauseButton.textContent = paused ? "▶️" : "⏸️";
     pauseButton.setAttribute(
       "aria-label",
-      isPaused ? "Resume refresh" : "Pause refresh"
+      paused ? "Resume refresh" : "Pause refresh"
     );
     pauseButton.setAttribute(
       "title",
-      isPaused ? "Resume refresh (this session only)" : "Pause refresh (this session only)"
+      paused ? "Resume refresh (this session only)" : "Pause refresh (this session only)"
     );
   };
 
@@ -285,10 +413,40 @@
     });
   }
 
+  if (tableBody) {
+    tableBody.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest("a, button, input, label, select, textarea")) {
+        return;
+      }
+      const row = target.closest("tr[data-href]");
+      if (!row) {
+        return;
+      }
+      const href = row.dataset.href;
+      if (href) {
+        window.location.href = href;
+      }
+    });
+  }
+
+  const themeToggle = document.getElementById("theme-toggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const nextTheme = getTheme() === "dark" ? "light" : "dark";
+      setTheme(nextTheme);
+      updateThemeToggle();
+    });
+    updateThemeToggle();
+  }
+
   if (pauseButton) {
     pauseButton.addEventListener("click", () => {
-      const isPaused = window.sessionStorage.getItem(pauseKey) === "true";
-      window.sessionStorage.setItem(pauseKey, String(!isPaused));
+      const paused = isPaused();
+      window.sessionStorage.setItem(pauseKey, String(!paused));
       updatePauseButton();
     });
     updatePauseButton();
@@ -299,5 +457,6 @@
   }
 
   applyHidden();
+  applyReceivedFormatting();
 </script>
 {% endblock %}
