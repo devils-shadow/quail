@@ -32,6 +32,7 @@
     <thead>
       <tr>
         <th class="from-col">From</th>
+        <th class="to-col">To</th>
         <th class="subject-col">Subject</th>
         <th class="received-col">Received</th>
       </tr>
@@ -49,6 +50,10 @@
       {% elif "@" in from_display %}
       {% set from_display = from_display.split("@")[0] %}
       {% endif %}
+      {% set to_display = message.envelope_rcpt or "" %}
+      {% if "@" in to_display %}
+      {% set to_display = to_display.split("@")[0] %}
+      {% endif %}
       <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
         <td class="from-col">
           <input class="message-select" type="checkbox" aria-label="Select message" />
@@ -57,12 +62,15 @@
           <span class="badge">Quarantined</span>
           {% endif %}
         </td>
+        <td class="to-col">{{ to_display }}</td>
         <td class="subject-col">
           <a href="/message/{{ message.id }}{{ inbox_query }}">
             {{ message.subject or "(No subject)" }}
           </a>
         </td>
-        <td class="received-col received-cell" data-received-at="{{ message.received_at }}">{{ message.received_at }}</td>
+        <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
+          {{ message.received_at }}
+        </td>
       </tr>
       {% endfor %}
       <tr data-empty-state style="display: none;">
@@ -144,7 +152,7 @@
     const row = document.createElement("tr");
     row.dataset.emptyState = "true";
     const cell = document.createElement("td");
-    cell.colSpan = 3;
+    cell.colSpan = 4;
     const emptyState = document.createElement("div");
     emptyState.className = "empty-state";
     emptyState.textContent = "This inbox is currently empty.";
@@ -194,6 +202,12 @@
       fromCell.appendChild(badge);
     }
 
+    const toCell = document.createElement("td");
+    toCell.className = "to-col";
+    const toValue = message.envelope_rcpt || "";
+    const toDisplay = toValue.includes("@") ? toValue.split("@")[0] : toValue;
+    toCell.textContent = toDisplay;
+
     const subjectCell = document.createElement("td");
     subjectCell.className = "subject-col";
     const link = document.createElement("a");
@@ -214,6 +228,7 @@
     }
 
     row.appendChild(fromCell);
+    row.appendChild(toCell);
     row.appendChild(subjectCell);
     row.appendChild(receivedCell);
     return row;
