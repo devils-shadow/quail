@@ -17,6 +17,7 @@ from typing import Iterable
 from urllib.parse import quote
 
 import bleach
+import html2text
 try:
     from bleach.css_sanitizer import CSSSanitizer
 except ImportError:  # pragma: no cover - depends on optional dependency
@@ -46,11 +47,13 @@ RETENTION_DAYS_KEY = "retention_days"
 QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
 ALLOW_HTML_KEY = "allow_html"
 ALLOW_RICH_HTML_KEY = "allow_rich_html"
+ALLOW_FULL_HTML_KEY = "allow_full_html"
 DEFAULT_ALLOWED_MIME_TYPES_VALUE = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
 DEFAULT_RETENTION_DAYS = "30"
 DEFAULT_QUARANTINE_RETENTION_DAYS = "3"
 DEFAULT_ALLOW_HTML = "false"
 DEFAULT_ALLOW_RICH_HTML = "false"
+DEFAULT_ALLOW_FULL_HTML = "false"
 ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
 ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
@@ -92,6 +95,8 @@ def _init_settings(settings_path: Path) -> None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
     if db.get_setting(settings_path, ALLOW_RICH_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_RICH_HTML_KEY, DEFAULT_ALLOW_RICH_HTML)
+    if db.get_setting(settings_path, ALLOW_FULL_HTML_KEY) is None:
+        db.set_setting(settings_path, ALLOW_FULL_HTML_KEY, DEFAULT_ALLOW_FULL_HTML)
 
 
 def _get_admin_pin_hash(settings_db_path: Path) -> str | None:
@@ -776,6 +781,20 @@ def _sanitize_html(html_body: str, rich: bool) -> str:
     )
 
 
+def _build_full_html_srcdoc(html_body: str, message_id: int) -> str:
+    def repl(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        cid = match.group(2)
+        target = quote(cid.strip("<>"), safe="")
+        return f'{attr}="/message/{message_id}/inline/{target}"'
+
+    rewritten = re.sub(r'(?i)\b(src|href)=["\']cid:([^"\']+)["\']', repl, html_body)
+    base_tag = '<base target="_blank" rel="noopener noreferrer">'
+    if re.search(r"(?i)<head[^>]*>", rewritten):
+        return re.sub(r"(?i)<head[^>]*>", lambda m: f"{m.group(0)}{base_tag}", rewritten, 1)
+    return f"{base_tag}{rewritten}"
+
+
 def _delete_path(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
@@ -820,6 +839,15 @@ def _update_message_status(settings_db_path: Path, message_id: int, status: str)
         conn.commit()
 
 
+def _html_to_text(html_body: str) -> str:
+    converter = html2text.HTML2Text()
+    converter.ignore_links = False
+    converter.ignore_images = True
+    converter.body_width = 0
+    text = converter.handle(html_body or "")
+    return text.strip()
+
+
 def _parse_message_body(eml_path: Path, allow_html: bool) -> tuple[str, str | None]:
     raw_bytes = eml_path.read_bytes()
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
@@ -832,10 +860,13 @@ def _parse_message_body(eml_path: Path, allow_html: bool) -> tuple[str, str | No
             continue
         if not body and part.get_content_type() == "text/plain":
             body = part.get_content()
-        if allow_html and html_body is None and part.get_content_type() == "text/html":
+        if html_body is None and part.get_content_type() == "text/html":
             html_body = part.get_content()
     if not body:
-        body = "(No plaintext body found.)"
+        if html_body:
+            body = _html_to_text(html_body) or "(No plaintext body found.)"
+        else:
+            body = "(No plaintext body found.)"
     return body, html_body
 
 
@@ -912,23 +943,21 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
     allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
-    allow_rich_html = db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true"
     body, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
     attachments = _get_message_attachments(settings.db_path, message_id)
-    sanitized_html = (
-        _sanitize_html(html_body, rich=allow_rich_html) if allow_html and html_body else None
-    )
+    full_html_srcdoc = None
+    if allow_html and html_body:
+        full_html_srcdoc = _build_full_html_srcdoc(html_body, message_id)
     return templates.TemplateResponse(
         "message.html",
         {
             "request": request,
             "message": message,
             "body": body,
-            "html_body": sanitized_html,
+            "html_srcdoc": full_html_srcdoc,
             "attachments": attachments,
             "is_admin": is_admin,
             "allow_html": allow_html,
-            "allow_rich_html": allow_rich_html,
             "current_inbox": request.query_params.get("inbox") or "",
         },
     )
@@ -959,6 +988,31 @@ async def attachment_download(
         media_type=row["content_type"],
         filename=row["filename"],
     )
+
+
+@app.get("/message/{message_id}/inline/{content_id}")
+async def inline_attachment(
+    request: Request, message_id: int, content_id: str
+) -> Response:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    message = _get_message(settings.db_path, message_id)
+    if message["quarantined"] and not is_admin:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    eml_path = Path(message["eml_path"])
+    raw_bytes = eml_path.read_bytes()
+    parsed = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+    target = content_id.strip("<>")
+    for part in parsed.walk():
+        part_cid = part.get("Content-ID")
+        if not part_cid:
+            continue
+        normalized = part_cid.strip("<>")
+        if normalized == target:
+            payload = part.get_payload(decode=True) or b""
+            content_type = part.get_content_type() or "application/octet-stream"
+            return Response(content=payload, media_type=content_type)
+    raise HTTPException(status_code=404, detail="Inline attachment not found.")
 
 
 @app.post("/admin/message/{message_id}/delete")
@@ -1075,7 +1129,6 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
         or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
-        "allow_rich_html": db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true",
         "message_count": storage_stats["message_count"],
         "message_bytes": _format_bytes(storage_stats["message_bytes"]),
         "attachment_bytes": _format_bytes(storage_stats["attachment_bytes"]),
@@ -1107,7 +1160,6 @@ async def admin_settings_post(
     retention_days: str = Form(""),
     quarantine_retention_days: str = Form(""),
     allow_html: str | None = Form(None),
-    allow_rich_html: str | None = Form(None),
     admin_pin: str | None = Form(None),
 ) -> RedirectResponse:
     redirect = _require_admin_session(request)
@@ -1123,7 +1175,6 @@ async def admin_settings_post(
         "quarantine_retention_days": db.get_setting(settings.db_path, QUARANTINE_RETENTION_DAYS_KEY)
         or DEFAULT_QUARANTINE_RETENTION_DAYS,
         "allow_html": db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true",
-        "allow_rich_html": db.get_setting(settings.db_path, ALLOW_RICH_HTML_KEY) == "true",
     }
     pin_configured_before = bool(_get_admin_pin_hash(settings.db_path))
     try:
@@ -1154,7 +1205,8 @@ async def admin_settings_post(
         str(quarantine_retention_value),
     )
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
-    db.set_setting(settings.db_path, ALLOW_RICH_HTML_KEY, "true" if allow_rich_html else "false")
+    db.set_setting(settings.db_path, ALLOW_RICH_HTML_KEY, "false")
+    db.set_setting(settings.db_path, ALLOW_FULL_HTML_KEY, "false")
     if admin_pin:
         if len(admin_pin) > ADMIN_PIN_MAX_LEN or len(admin_pin) < ADMIN_PIN_MIN_LEN:
             return RedirectResponse(
@@ -1178,7 +1230,6 @@ async def admin_settings_post(
         "retention_days": str(retention_value),
         "quarantine_retention_days": str(quarantine_retention_value),
         "allow_html": bool(allow_html),
-        "allow_rich_html": bool(allow_rich_html),
     }
     _log_admin_action(
         settings.db_path,

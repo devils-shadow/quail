@@ -53,9 +53,9 @@
 
 <div class="card tabs-container">
   <div class="tabs" data-tabs>
-    {% if allow_html and html_body %}
+    {% if allow_html and html_srcdoc %}
     <button class="tab active" type="button" data-tab="html" aria-selected="true">
-      HTML{% if allow_rich_html %} (Rich){% endif %}
+      HTML
     </button>
     <button class="tab" type="button" data-tab="text" aria-selected="false">TEXT</button>
     {% else %}
@@ -64,10 +64,16 @@
     <button class="tab" type="button" data-tab="attachments" aria-selected="false">ATTACHMENTS</button>
   </div>
   <div class="message-body tab-panels">
-    {% if allow_html and html_body %}
+    {% if allow_html and html_srcdoc %}
     <section class="tab-panel active" data-tab-panel="html">
-      <div class="message-html{% if allow_rich_html %} message-html--rich{% endif %}">
-        {{ html_body | safe }}
+      <div class="message-html message-html--full">
+        <iframe
+          class="message-html-frame"
+          title="HTML preview"
+          sandbox="allow-same-origin"
+          referrerpolicy="no-referrer"
+          srcdoc="{{ html_srcdoc | e }}"
+        ></iframe>
       </div>
     </section>
     <section class="tab-panel" data-tab-panel="text">

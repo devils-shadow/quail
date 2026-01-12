@@ -73,18 +73,8 @@
     />
   </div>
   <div>
-    <label for="allow_html">Allow sanitized HTML rendering</label>
+    <label for="allow_html">Allow HTML rendering (full)</label>
     <input id="allow_html" name="allow_html" type="checkbox" value="true" {% if allow_html %}checked{% endif %} />
-  </div>
-  <div>
-    <label for="allow_rich_html">Allow rich HTML rendering (tables + inline styles)</label>
-    <input
-      id="allow_rich_html"
-      name="allow_rich_html"
-      type="checkbox"
-      value="true"
-      {% if allow_rich_html %}checked{% endif %}
-    />
   </div>
   <div>
     <label for="admin_pin">Update admin PIN (leave blank to keep)</label>
