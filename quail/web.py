@@ -17,7 +17,10 @@ from typing import Iterable
 from urllib.parse import quote
 
 import bleach
-from bleach.css_sanitizer import CSSSanitizer
+try:
+    from bleach.css_sanitizer import CSSSanitizer
+except ImportError:  # pragma: no cover - depends on optional dependency
+    CSSSanitizer = None
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -669,45 +672,49 @@ _RICH_ALLOWED_TAGS = [
     "h5",
     "h6",
 ]
-_RICH_CSS_SANITIZER = CSSSanitizer(
-    allowed_css_properties=[
-        "color",
-        "background-color",
-        "font-family",
-        "font-size",
-        "font-weight",
-        "font-style",
-        "text-decoration",
-        "text-align",
-        "line-height",
-        "letter-spacing",
-        "margin",
-        "margin-left",
-        "margin-right",
-        "margin-top",
-        "margin-bottom",
-        "padding",
-        "padding-left",
-        "padding-right",
-        "padding-top",
-        "padding-bottom",
-        "border",
-        "border-top",
-        "border-right",
-        "border-bottom",
-        "border-left",
-        "border-collapse",
-        "border-spacing",
-        "width",
-        "max-width",
-        "min-width",
-        "height",
-        "max-height",
-        "min-height",
-        "display",
-        "vertical-align",
-        "white-space",
-    ]
+_RICH_CSS_SANITIZER = (
+    CSSSanitizer(
+        allowed_css_properties=[
+            "color",
+            "background-color",
+            "font-family",
+            "font-size",
+            "font-weight",
+            "font-style",
+            "text-decoration",
+            "text-align",
+            "line-height",
+            "letter-spacing",
+            "margin",
+            "margin-left",
+            "margin-right",
+            "margin-top",
+            "margin-bottom",
+            "padding",
+            "padding-left",
+            "padding-right",
+            "padding-top",
+            "padding-bottom",
+            "border",
+            "border-top",
+            "border-right",
+            "border-bottom",
+            "border-left",
+            "border-collapse",
+            "border-spacing",
+            "width",
+            "max-width",
+            "min-width",
+            "height",
+            "max-height",
+            "min-height",
+            "display",
+            "vertical-align",
+            "white-space",
+        ]
+    )
+    if CSSSanitizer
+    else None
 )
 
 
@@ -732,14 +739,18 @@ def _rich_attribute_filter(tag: str, name: str, value: str) -> bool:
 def _sanitize_html(html_body: str, rich: bool) -> str:
     cleaned = _strip_html_blocks(html_body)
     if rich:
-        return bleach.clean(
-            cleaned,
-            tags=_RICH_ALLOWED_TAGS,
-            attributes=_rich_attribute_filter,
-            protocols=["http", "https", "mailto"],
-            strip=True,
-            css_sanitizer=_RICH_CSS_SANITIZER,
-        )
+        if _RICH_CSS_SANITIZER is None:
+            LOGGER.warning("Rich HTML enabled but tinycss2 is missing; falling back to minimal sanitize.")
+            rich = False
+        else:
+            return bleach.clean(
+                cleaned,
+                tags=_RICH_ALLOWED_TAGS,
+                attributes=_rich_attribute_filter,
+                protocols=["http", "https", "mailto"],
+                strip=True,
+                css_sanitizer=_RICH_CSS_SANITIZER,
+            )
     return bleach.clean(
         cleaned,
         tags=_MINIMAL_ALLOWED_TAGS,
