@@ -614,7 +614,7 @@
 
       .message-html-frame {
         width: 100%;
-        min-height: 75vh;
+        min-height: 60vh;
         border: 0;
         display: block;
         background: transparent;
@@ -828,7 +828,7 @@
         if (!iframe) {
           return;
         }
-        const top = container.getBoundingClientRect().top;
+        const top = iframe.getBoundingClientRect().top;
         const maxHeight = window.innerHeight - top - 24;
         if (maxHeight <= 200) {
           return;
