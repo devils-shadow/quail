@@ -19,9 +19,9 @@ fi
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y
-  apt-get install -y python3-venv python3-pip postfix
+  apt-get install -y python3-venv python3-pip postfix rsyslog
 else
-  echo "ERROR: unsupported package manager. TODO: install python3-venv, python3-pip, postfix." >&2
+  echo "ERROR: unsupported package manager. TODO: install python3-venv, python3-pip, postfix, rsyslog." >&2
   exit 1
 fi
 
@@ -39,15 +39,10 @@ if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
   python3 -m venv "${INSTALL_DIR}/venv"
 fi
 
+chmod 0755 "${INSTALL_DIR}/scripts/quail-ingest"
+
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip
 "${INSTALL_DIR}/venv/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
-
-if [[ ! -f /etc/postfix/virtual ]]; then
-  printf '%s\n' "# Quail catch-all mapping for m.cst.ro" > /etc/postfix/virtual
-fi
-if ! grep -Fxq "@m.cst.ro quail" /etc/postfix/virtual; then
-  printf '%s\n' "@m.cst.ro quail" >> /etc/postfix/virtual
-fi
 
 if command -v postconf >/dev/null 2>&1; then
   if [[ -f /etc/quail/config.env ]]; then
@@ -56,20 +51,56 @@ if command -v postconf >/dev/null 2>&1; then
     source /etc/quail/config.env
     set +a
   fi
+  domains_raw="${QUAIL_DOMAINS:-m.cst.ro}"
+  IFS=',' read -r -a domain_list <<< "${domains_raw}"
+  quail_domains=()
+  for domain_entry in "${domain_list[@]}"; do
+    domain="$(echo "${domain_entry}" | xargs)"
+    if [[ -n "${domain}" ]]; then
+      quail_domains+=("${domain}")
+    fi
+  done
+  if [[ ${#quail_domains[@]} -eq 0 ]]; then
+    quail_domains=("m.cst.ro")
+  fi
+  quail_domains_string="${quail_domains[*]}"
   max_size_mb="${QUAIL_MAX_MESSAGE_SIZE_MB:-10}"
   max_size_bytes=$((max_size_mb * 1024 * 1024))
-  virtual_alias_domains="$(postconf -h virtual_alias_domains || true)"
-  if [[ -z "${virtual_alias_domains}" ]]; then
-    postconf -e "virtual_alias_domains = m.cst.ro"
-  elif [[ "${virtual_alias_domains}" != *"m.cst.ro"* ]]; then
-    echo "WARNING: virtual_alias_domains is already set; update manually to include m.cst.ro." >&2
+  # NOTE: We intentionally do not use virtual aliasing for Quail domains because
+  # virtual alias rewriting happens before transport lookup and would bypass the
+  # pipe transport needed to preserve the original envelope recipient.
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" =~ ^# ]] && continue
+    key="${line%%=*}"
+    key="$(echo "${key}" | xargs)"
+    current="$(postconf -h "${key}" || true)"
+    if [[ -z "${current}" ]]; then
+      postconf -e "${line}"
+    fi
+  done < "${INSTALL_DIR}/postfix/maincf.snippet"
+
+  relay_domains="$(postconf -h relay_domains || true)"
+  if [[ -z "${relay_domains}" ]]; then
+    postconf -e "relay_domains = ${quail_domains_string}"
+  else
+    missing_domain=0
+    for domain in "${quail_domains[@]}"; do
+      if [[ "${relay_domains}" != *"${domain}"* ]]; then
+        missing_domain=1
+        break
+      fi
+    done
+    if [[ ${missing_domain} -eq 1 ]]; then
+      echo "WARNING: relay_domains is already set; update manually to include ${quail_domains_string}." >&2
+    fi
   fi
 
-  virtual_alias_maps="$(postconf -h virtual_alias_maps || true)"
-  if [[ -z "${virtual_alias_maps}" ]]; then
-    postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-  elif [[ "${virtual_alias_maps}" != *"/etc/postfix/virtual"* ]]; then
-    echo "WARNING: virtual_alias_maps is already set; update manually to include /etc/postfix/virtual." >&2
+  transport_maps="$(postconf -h transport_maps || true)"
+  if [[ -z "${transport_maps}" ]]; then
+    postconf -e "transport_maps = hash:/etc/postfix/transport"
+  elif [[ "${transport_maps}" != *"/etc/postfix/transport"* ]]; then
+    echo "WARNING: transport_maps is already set; update manually to include /etc/postfix/transport." >&2
   fi
 
   message_size_limit="$(postconf -h message_size_limit || true)"
@@ -87,9 +118,20 @@ if ! grep -q "^quail\s" /etc/postfix/master.cf; then
   cat "${INSTALL_DIR}/postfix/mastercf_pipe.snippet" >> /etc/postfix/master.cf
 fi
 
-postmap /etc/postfix/virtual
+if [[ ! -f /etc/postfix/transport ]]; then
+  printf '%s\n' "# Quail transport mapping" > /etc/postfix/transport
+fi
+for domain in "${quail_domains[@]}"; do
+  entry="${domain} quail:"
+  if ! grep -Fxq "${entry}" /etc/postfix/transport; then
+    printf '%s\n' "${entry}" >> /etc/postfix/transport
+  fi
+done
+
+postmap /etc/postfix/transport
 if command -v systemctl >/dev/null 2>&1; then
   systemctl reload postfix || systemctl restart postfix
+  systemctl enable --now rsyslog
 fi
 
 install -m 0644 "${INSTALL_DIR}/systemd/quail.service" /etc/systemd/system/quail.service
