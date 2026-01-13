@@ -67,6 +67,10 @@ Use this checklist before running `install.sh`:
 - In dark mode, minimal HTML messages inherit the app theme for readable
   contrast without altering richer layouts.
 
+## Testing
+
+- See `docs/TESTING.md` for pytest markers, standard commands, and CI coverage.
+
 ## Install location
 
 The install script and systemd units assume the repository is cloned to

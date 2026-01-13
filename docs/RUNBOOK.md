@@ -35,6 +35,12 @@ To upgrade Quail to a newer version:
    `QUAIL_ADMIN_PIN` in `/etc/quail/config.env` before running the script.
 3. Check the service and timer status as in the installation step.
 
+## Testing
+
+- Standard suite (mirrors CI): `pytest -m "not slow" -ra`
+- Focused subsets: `pytest -m unit -ra`, `pytest -m api -ra`, `pytest -m integration -ra`
+- Full guidance lives in `docs/TESTING.md`.
+
 ## Daily Operation
 
 - **Inbox access:** Access the web UI via the configured address (VPN or localhost). Message detail pages include HTML, plaintext, and attachments tabs. Admins can enable full HTML rendering in settings; when disabled, only plaintext is shown.

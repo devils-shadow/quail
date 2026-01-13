@@ -2,6 +2,7 @@
 
 - [Architecture](ARCHITECTURE.md): Overview of major components and their interactions.
 - [Runbook](RUNBOOK.md): Instructions for installing, configuring and operating Quail.
+- [Testing](TESTING.md): Test markers, local commands, and CI expectations.
 - [Glossary](GLOSSARY.md): Definitions of domain‑specific terms used in this project.
 - [Status](STATUS.md): Current state of the project, known issues and next milestones.
 - [Roadmap](ROADMAP.md): Planned features and near‑term objectives.
