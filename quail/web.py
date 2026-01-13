@@ -799,6 +799,23 @@ def _build_full_html_srcdoc(html_body: str, message_id: int) -> str:
     return f"{base_tag}{rewritten}"
 
 
+def _is_minimal_html(html_body: str | None) -> bool:
+    if not html_body:
+        return True
+    normalized = html_body.lower()
+    if "<table" in normalized:
+        return False
+    if "<img" in normalized:
+        return False
+    if "<style" in normalized or "style=" in normalized:
+        return False
+    if "class=" in normalized or "id=" in normalized:
+        return False
+    if "<div" in normalized:
+        return False
+    return True
+
+
 def _delete_path(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
