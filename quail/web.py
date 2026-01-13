@@ -799,6 +799,23 @@ def _build_full_html_srcdoc(html_body: str, message_id: int) -> str:
     return f"{base_tag}{rewritten}"
 
 
+def _is_minimal_html(html_body: str | None) -> bool:
+    if not html_body:
+        return True
+    normalized = html_body.lower()
+    if "<table" in normalized:
+        return False
+    if "<img" in normalized:
+        return False
+    if "<style" in normalized or "style=" in normalized:
+        return False
+    if "class=" in normalized or "id=" in normalized:
+        return False
+    if "<div" in normalized:
+        return False
+    return True
+
+
 def _delete_path(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
@@ -952,6 +969,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     full_html_srcdoc = None
     if allow_html and html_body:
         full_html_srcdoc = _build_full_html_srcdoc(html_body, message_id)
+    default_tab = "text" if _is_minimal_html(html_body) else "html"
     return templates.TemplateResponse(
         "message.html",
         {
@@ -964,6 +982,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "allow_html": allow_html,
             "current_inbox": request.query_params.get("inbox") or "",
             "body_class": "message-view",
+            "default_tab": default_tab,
         },
     )
 
