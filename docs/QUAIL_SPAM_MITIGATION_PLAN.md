@@ -1,5 +1,8 @@
 # Quail Spam Mitigation Plan (Admin Controls)
 
+Status: Implemented. This plan is retained as historical context; see
+`CHANGELOG.md` and `tests/test_phase8_acceptance.py` for current coverage.
+
 This document is a repository-ready plan for the spam-mitigation admin features previously
 scoped for Quail. It aligns with `QUAIL_CODEX_CONTEXT.md` and the existing FastAPI + SQLite
 implementation. It is intentionally specific, but does not add new requirements beyond the

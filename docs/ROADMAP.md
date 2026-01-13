@@ -4,10 +4,9 @@ This roadmap outlines high‑level goals for the upcoming releases. Timeframes a
 
 ## Near Term
 
-- **Installation UX:** Finalize `install.sh` and `upgrade.sh` scripts to be idempotent, safe and fully automate OS configuration.
-- **Testing & CI:** Introduce automated tests for ingest, retention and the web UI. Expand CI to run these tests on each commit.
-- **Admin PIN Flow:** Build a guided setup process for the initial admin PIN and document recovery procedures.
-- **UI Polish:** Continue refining inbox and message detail UX, including accessibility and layout consistency.
+- **DMARC Support:** Evaluate and implement DMARC validation for broader public deployments.
+- **WebSocket Inbox Updates:** Implement real-time inbox refresh per `docs/WEBSOCKET_INBOX_PLAN.md`.
+- **Operational Visibility:** Add lightweight service health/status and storage usage reporting.
 - **Documentation:** Maintain and update the documentation set (architecture, runbook, glossary, ADRs) as features evolve.
 
 ## Longer Term
