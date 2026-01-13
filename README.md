@@ -32,14 +32,20 @@ release updates.
 
 ## Configuration
 
-Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
-needed. The default bind host in the example config is `127.0.0.1`, so the
-service binds to localhost unless you change it; use a reverse proxy and DNS if
-you need external access. Set `QUAIL_DOMAINS` to a comma-separated list of
-domains that `install.sh` registers in Postfix transport maps and relay
-domains; the installer will fail fast if you leave the example value in place.
-Set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN; `install.sh` will require it
-unless a PIN is already configured.
+Use this checklist before running `install.sh`:
+
+1) Copy `config/config.example.env` from the repo into `/etc/quail/config.env`.
+2) Edit `/etc/quail/config.env` and set `QUAIL_DOMAINS` to a comma-separated
+   list of domains Postfix should accept (required; the installer rejects the
+   example value).
+3) In the same file, set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN (required
+   on first install).
+4) Optional: choose one of the following for `QUAIL_BIND_HOST` in
+   `/etc/quail/config.env`:
+   - Local-only dev: `127.0.0.1`
+   - VPN/internal DNS (direct access): `0.0.0.0`
+   - Public internet: `127.0.0.1` behind a reverse proxy (for example, nginx
+     with OAuth2)
 
 ## Admin access
 
