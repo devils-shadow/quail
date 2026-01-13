@@ -55,24 +55,10 @@
 <div class="card tabs-container" data-message-tabs>
   <div class="tabs" data-tabs>
     {% if allow_html and html_srcdoc %}
-    {% set html_is_default = default_tab == "html" %}
-    {% set text_is_default = default_tab == "text" %}
-    <button
-      class="tab{% if html_is_default %} active{% endif %}"
-      type="button"
-      data-tab="html"
-      aria-selected="{{ 'true' if html_is_default else 'false' }}"
-    >
+    <button class="tab active" type="button" data-tab="html" aria-selected="true">
       HTML
     </button>
-    <button
-      class="tab{% if text_is_default %} active{% endif %}"
-      type="button"
-      data-tab="text"
-      aria-selected="{{ 'true' if text_is_default else 'false' }}"
-    >
-      TEXT
-    </button>
+    <button class="tab" type="button" data-tab="text" aria-selected="false">TEXT</button>
     {% else %}
     <button class="tab active" type="button" data-tab="text" aria-selected="true">TEXT</button>
     {% endif %}
@@ -80,7 +66,7 @@
   </div>
   <div class="message-body tab-panels">
     {% if allow_html and html_srcdoc %}
-    <section class="tab-panel{% if html_is_default %} active{% endif %}" data-tab-panel="html">
+    <section class="tab-panel active" data-tab-panel="html">
       <div class="message-html message-html--full">
         <iframe
           class="message-html-frame"
@@ -92,7 +78,7 @@
         ></iframe>
       </div>
     </section>
-    <section class="tab-panel{% if text_is_default %} active{% endif %}" data-tab-panel="text">
+    <section class="tab-panel" data-tab-panel="text">
       <pre>{{ body }}</pre>
     </section>
     {% else %}
