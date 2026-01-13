@@ -29,9 +29,7 @@ def test_admin_delete_message_removes_files(tmp_path, monkeypatch) -> None:
         unlock_admin(client, pin="1234")
 
         message = build_email(subject="Delete", to_addr="user@mail.example.test")
-        message_row = insert_message(
-            settings_obj, message=message, envelope_rcpt="user@mail.example.test"
-        )
+        message_row = insert_message(settings_obj, message=message, envelope_rcpt="user@mail.example.test")
         attachment = insert_attachment(
             settings_obj,
             message_id=message_row["id"],
@@ -40,9 +38,7 @@ def test_admin_delete_message_removes_files(tmp_path, monkeypatch) -> None:
             content=b"delete",
         )
 
-        response = client.post(
-            f"/admin/message/{message_row['id']}/delete", follow_redirects=False
-        )
+        response = client.post(f"/admin/message/{message_row['id']}/delete", follow_redirects=False)
 
         assert response.status_code == 303
         assert message_row["id"] not in _fetch_message_ids(settings_obj)
