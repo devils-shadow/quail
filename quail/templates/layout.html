@@ -893,25 +893,42 @@
         const applyTheme = () => {
           const doc = iframe.contentDocument;
           if (!doc) {
-            return;
+            return false;
           }
           const rootStyles = getComputedStyle(document.documentElement);
           const background = rootStyles.getPropertyValue("--message-rich-bg").trim() || "#ffffff";
           const text = rootStyles.getPropertyValue("--text").trim() || "#0f1b2d";
           const link = rootStyles.getPropertyValue("--primary").trim() || "#1f5eff";
-          const style = doc.createElement("style");
-          style.textContent = `html,body{background:${background};color:${text};}a{color:${link};}`;
-          if (doc.head) {
-            doc.head.appendChild(style);
-          } else {
-            doc.documentElement.appendChild(style);
+          if (doc.documentElement) {
+            doc.documentElement.style.backgroundColor = background;
+            doc.documentElement.style.color = text;
           }
+          if (doc.body) {
+            doc.body.style.backgroundColor = background;
+            doc.body.style.color = text;
+          }
+          const styleId = "quail-minimal-theme";
+          let style = doc.getElementById(styleId);
+          if (!style) {
+            style = doc.createElement("style");
+            style.id = styleId;
+            if (doc.head) {
+              doc.head.appendChild(style);
+            } else {
+              doc.documentElement.appendChild(style);
+            }
+          }
+          style.textContent = `a{color:${link};}`;
+          return true;
         };
-        if (iframe.contentDocument?.readyState === "complete") {
-          applyTheme();
-          return;
-        }
-        iframe.addEventListener("load", applyTheme, { once: true });
+        const tryApply = () => {
+          if (applyTheme()) {
+            return;
+          }
+          window.setTimeout(tryApply, 50);
+        };
+        iframe.addEventListener("load", tryApply, { once: true });
+        tryApply();
       };
 
       applyMinimalHtmlTheme();
