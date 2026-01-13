@@ -27,5 +27,7 @@ jobs:
         run: ruff check .
       - name: Check formatting with Black
         run: black --check .
+      - name: Compile Python sources
+        run: python -m compileall quail
       - name: Run tests
-        run: pytest
+        run: pytest -m "not slow" -ra --durations=10

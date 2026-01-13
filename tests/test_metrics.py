@@ -8,6 +8,8 @@ import pytest
 
 from quail import db, web
 
+pytestmark = pytest.mark.unit
+
 
 def _insert_message(
     db_path,

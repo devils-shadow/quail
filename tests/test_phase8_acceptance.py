@@ -6,10 +6,14 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from quail import db, ingest, purge, settings
 from quail.web import app
+
+pytestmark = [pytest.mark.integration, pytest.mark.api]
 
 
 @contextmanager

@@ -6,7 +6,11 @@ import json
 from datetime import datetime, timezone
 from email.message import EmailMessage
 
+import pytest
+
 from quail import db, ingest, settings
+
+pytestmark = pytest.mark.unit
 
 
 def _now_iso() -> str:

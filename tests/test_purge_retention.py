@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from quail import db, purge, settings
+
+pytestmark = pytest.mark.integration
 
 
 def _configure_settings(tmp_path, monkeypatch) -> None:
