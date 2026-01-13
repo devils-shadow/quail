@@ -793,10 +793,13 @@ def _build_full_html_srcdoc(html_body: str, message_id: int) -> str:
         return f'{attr}="/message/{message_id}/inline/{target}"'
 
     rewritten = re.sub(r'(?i)\b(src|href)=["\']cid:([^"\']+)["\']', repl, html_body)
-    base_tag = '<base target="_blank" rel="noopener noreferrer">'
+    head_inject = (
+        '<base target="_blank" rel="noopener noreferrer">'
+        "<style>html,body{margin:0;padding:0;}</style>"
+    )
     if re.search(r"(?i)<head[^>]*>", rewritten):
-        return re.sub(r"(?i)<head[^>]*>", lambda m: f"{m.group(0)}{base_tag}", rewritten, 1)
-    return f"{base_tag}{rewritten}"
+        return re.sub(r"(?i)<head[^>]*>", lambda m: f"{m.group(0)}{head_inject}", rewritten, 1)
+    return f"{head_inject}{rewritten}"
 
 
 def _delete_path(path: Path) -> None:
