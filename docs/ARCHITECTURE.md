@@ -20,7 +20,7 @@ By default inbox messages and attachments are retained for **30 days**, while qu
 
 ## Admin Model
 
-There are no per‑user accounts. A single shared admin PIN gates access to privileged actions【104907567664902†L31-L33】【104907567664902†L101-L112】. The PIN is stored as a salted strong hash; admin sessions have a limited TTL and rate‑limiting protects against brute force【104907567664902†L101-L106】. Admins can change global settings, delete messages, toggle HTML rendering and modify attachment rules【104907567664902†L107-L112】.
+There are no per‑user accounts. A single shared admin PIN gates access to privileged actions. The PIN is stored as a salted strong hash; admin sessions have a limited TTL and rate‑limiting protects against brute force. Admins can change global settings, delete messages, toggle full HTML rendering in the sandboxed iframe view, and modify attachment rules.
 
 ## Repository Structure
 

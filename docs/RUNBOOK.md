@@ -35,7 +35,7 @@ To upgrade Quail to a newer version:
 
 ## Daily Operation
 
-- **Inbox access:** Access the web UI via the configured address (VPN or localhost). The default view shows plaintext messages; administrators can enable sanitized HTML rendering【819940561035949†L35-L40】.
+- **Inbox access:** Access the web UI via the configured address (VPN or localhost). Message detail pages include HTML, plaintext, and attachments tabs. Admins can enable full HTML rendering in settings; when disabled, only plaintext is shown.
 - **Admin actions:** Click the Unlock button and enter the shared admin PIN to perform privileged actions such as changing settings, deleting messages or modifying retention policies. The admin settings page includes ingest visibility metrics (inbox/quarantine/dropped counts, ingest rate, and top sender domains) for the last 24 hours.
 - **Retention policy:** The purge timer automatically deletes inbox messages older than the configured retention period (default 30 days) and quarantined/dropped messages older than the quarantine retention period (default 3 days). Admins can optionally set per-domain quarantine overrides in the settings UI.
 - **Audit retention:** Admin audit entries are retained for 30 days and are purged alongside the regular retention job.
