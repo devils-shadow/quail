@@ -885,6 +885,37 @@
 
       initTabs();
 
+      const applyMinimalHtmlTheme = () => {
+        const iframe = document.querySelector(".message-html-frame[data-minimal=\"true\"]");
+        if (!iframe) {
+          return;
+        }
+        const applyTheme = () => {
+          const doc = iframe.contentDocument;
+          if (!doc) {
+            return;
+          }
+          const rootStyles = getComputedStyle(document.documentElement);
+          const background = rootStyles.getPropertyValue("--message-rich-bg").trim() || "#ffffff";
+          const text = rootStyles.getPropertyValue("--text").trim() || "#0f1b2d";
+          const link = rootStyles.getPropertyValue("--primary").trim() || "#1f5eff";
+          const style = doc.createElement("style");
+          style.textContent = `html,body{background:${background};color:${text};}a{color:${link};}`;
+          if (doc.head) {
+            doc.head.appendChild(style);
+          } else {
+            doc.documentElement.appendChild(style);
+          }
+        };
+        if (iframe.contentDocument?.readyState === "complete") {
+          applyTheme();
+          return;
+        }
+        iframe.addEventListener("load", applyTheme, { once: true });
+      };
+
+      applyMinimalHtmlTheme();
+
     </script>
   </body>
 </html>

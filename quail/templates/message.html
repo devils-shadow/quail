@@ -87,6 +87,7 @@
           title="HTML preview"
           sandbox="allow-same-origin"
           referrerpolicy="no-referrer"
+          {% if is_minimal_html %}data-minimal="true"{% endif %}
           srcdoc="{{ html_srcdoc | e }}"
         ></iframe>
       </div>
