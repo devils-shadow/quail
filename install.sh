@@ -35,6 +35,66 @@ if [[ ! -f /etc/quail/config.env ]]; then
   install -m 0644 "${INSTALL_DIR}/config/config.example.env" /etc/quail/config.env
 fi
 
+if [[ -f /etc/quail/config.env ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  source /etc/quail/config.env
+  set +a
+fi
+
+db_path="${QUAIL_DB_PATH:-/var/lib/quail/quail.db}"
+pin_already_set=0
+if [[ -f "${db_path}" ]]; then
+  pin_already_set="$(python3 - <<'PY'
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+try:
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'admin_pin_hash' LIMIT 1"
+        ).fetchone()
+    if row and row[0]:
+        print("1")
+    else:
+        print("0")
+except sqlite3.Error:
+    print("0")
+PY
+"${db_path}")"
+fi
+
+if [[ "${pin_already_set}" != "1" && -z "${QUAIL_ADMIN_PIN:-}" ]]; then
+  cat <<'EOF' >&2
+========================================
+ERROR: QUAIL_ADMIN_PIN is not set.
+========================================
+
+Quail requires a digits-only admin PIN (4-9 digits) during installation.
+Set QUAIL_ADMIN_PIN in /etc/quail/config.env, for example:
+
+  QUAIL_ADMIN_PIN=1234
+
+Then re-run: sudo ./install.sh
+EOF
+  exit 1
+fi
+
+if [[ "${pin_already_set}" != "1" ]]; then
+  if [[ ! "${QUAIL_ADMIN_PIN}" =~ ^[0-9]+$ ]] || [[ ${#QUAIL_ADMIN_PIN} -lt 4 ]] || [[ ${#QUAIL_ADMIN_PIN} -gt 9 ]]; then
+    cat <<'EOF' >&2
+========================================
+ERROR: QUAIL_ADMIN_PIN must be 4-9 digits.
+========================================
+
+Update QUAIL_ADMIN_PIN in /etc/quail/config.env with a digits-only value, then
+re-run: sudo ./install.sh
+EOF
+    exit 1
+  fi
+fi
+
 if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
   python3 -m venv "${INSTALL_DIR}/venv"
 fi
@@ -44,13 +104,20 @@ chmod 0755 "${INSTALL_DIR}/scripts/quail-ingest"
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip
 "${INSTALL_DIR}/venv/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
 
+"${INSTALL_DIR}/venv/bin/python" - <<'PY'
+import os
+
+from quail import db, settings
+from quail.security import hash_pin
+
+pin = os.getenv("QUAIL_ADMIN_PIN", "")
+db_path = settings.get_settings().db_path
+db.init_db(db_path)
+if pin and db.get_setting(db_path, "admin_pin_hash") is None:
+    db.set_setting(db_path, "admin_pin_hash", hash_pin(pin))
+PY
+
 if command -v postconf >/dev/null 2>&1; then
-  if [[ -f /etc/quail/config.env ]]; then
-    # shellcheck disable=SC1091
-    set -a
-    source /etc/quail/config.env
-    set +a
-  fi
   if [[ -z "${QUAIL_DOMAINS:-}" || "${QUAIL_DOMAINS}" == "mail.example.test" ]]; then
     cat <<'EOF' >&2
 ========================================

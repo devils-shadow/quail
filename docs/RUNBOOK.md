@@ -5,7 +5,7 @@ This runbook provides step‑by‑step instructions for installing, configuring,
 ## Installation
 
 1. **Clone the repository** on the target host (a spare laptop running Ubuntu Server as assumed in the context).
-2. **Create configuration:** Copy `config/config.example.env` to `/etc/quail/config.env` and adjust the values. Replace the example `QUAIL_DOMAINS` with the comma-separated list of domains you want Postfix to accept.
+2. **Create configuration:** Copy `config/config.example.env` to `/etc/quail/config.env` and adjust the values. Replace the example `QUAIL_DOMAINS` with the comma-separated list of domains you want Postfix to accept and set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN.
 3. **Run the installer:** Execute `sudo ./install.sh`. The script will:
    - Install necessary OS packages.
    - Create a system user and the `/var/lib/quail/{eml,att}` directories.
@@ -31,6 +31,8 @@ To upgrade Quail to a newer version:
 
 1. Pull the latest changes into the repository.
 2. Run `sudo ./upgrade.sh`. It will update dependencies, restart services and leave stored mail intact【104907567664902†L203-L210】.
+   To reset the admin PIN during upgrade, set `QUAIL_RESET_PIN=true` and
+   `QUAIL_ADMIN_PIN` in `/etc/quail/config.env` before running the script.
 3. Check the service and timer status as in the installation step.
 
 ## Daily Operation

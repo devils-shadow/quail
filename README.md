@@ -38,6 +38,8 @@ service binds to localhost unless you change it; use a reverse proxy and DNS if
 you need external access. Set `QUAIL_DOMAINS` to a comma-separated list of
 domains that `install.sh` registers in Postfix transport maps and relay
 domains; the installer will fail fast if you leave the example value in place.
+Set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN; `install.sh` will require it
+unless a PIN is already configured.
 
 ## Admin access
 

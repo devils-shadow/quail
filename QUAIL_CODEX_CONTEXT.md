@@ -104,6 +104,7 @@ No SaaS. No external dependencies. One operator. Low volume.
 - Admin session TTL: 15–30 minutes
 - Rate-limit PIN attempts
 - Log admin actions (timestamp + source IP)
+- Admin PIN is configured during install via `QUAIL_ADMIN_PIN`
 
 Admin-only actions:
 - Change global settings
