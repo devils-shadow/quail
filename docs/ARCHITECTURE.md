@@ -4,7 +4,7 @@ This document summarizes the architecture described in `QUAIL_CODEX_CONTEXT.md` 
 
 ## Public Plane
 
-Quail uses **Postfix** as its public facing SMTP server. The mail daemon listens on TCP/25 and accepts mail for the domain `m.cst.ro`【104907567664902†L42-L46】. Postfix enforces a maximum message size (default 10 MB) and pipes the raw RFC822 message together with the envelope recipient to the ingest script【104907567664902†L42-L47】.
+Quail uses **Postfix** as its public facing SMTP server. The mail daemon listens on TCP/25 and accepts mail for configured domains (example: `mail.example.test`). Postfix enforces a maximum message size (default 10 MB) and pipes the raw RFC822 message together with the envelope recipient to the ingest script.
 
 ## Private Plane
 

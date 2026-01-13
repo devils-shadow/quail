@@ -10,7 +10,7 @@ Do not invent requirements. Do not remove constraints. Prefer safe defaults.
 ## 1. Project Overview
 
 **Name:** Quail  
-**Purpose:** Self-hosted, receive-only email sink for CST QA/dev teams.
+**Purpose:** Self-hosted, receive-only email sink for internal QA/dev teams.
 
 Quail accepts email from the public internet and exposes a **shared inbox UI**
 accessible only over VPN or explicitly configured private networks.
@@ -23,8 +23,8 @@ No SaaS. No external dependencies. One operator. Low volume.
 
 ## 2. Core Requirements (Non-Negotiable)
 
-- Domain: `m.cst.ro`
-- Catch-all inbound: `anything@m.cst.ro`
+- Domain: configured at install (example: `mail.example.test` in `/etc/quail/config.env`)
+- Catch-all inbound: `anything@mail.example.test` (when using catch-all)
 - Receive-only. No outbound SMTP, no bounces.
 - Public SMTP, private UI.
 - No per-user accounts.
@@ -42,7 +42,7 @@ No SaaS. No external dependencies. One operator. Low volume.
 ### Public Plane
 - Postfix SMTP
 - Listens on TCP/25
-- Accepts mail for `m.cst.ro`
+- Accepts mail for configured domains (example: `mail.example.test`)
 - Enforces max message size (default 10 MB)
 - Pipes raw RFC822 message + envelope RCPT to local ingest
 
@@ -80,8 +80,8 @@ No SaaS. No external dependencies. One operator. Low volume.
 
 ### HTML
 - Default: plaintext only
-- Optional sanitized HTML view (admin-controlled)
-- Remote images blocked by default
+- Optional full HTML view (admin-controlled) rendered in a sandboxed iframe
+- Plaintext remains available alongside HTML
 
 ---
 

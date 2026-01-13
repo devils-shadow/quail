@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file. This projec
 
 - Message detail layout uses fixed panel scrolling and desktop-tuned spacing.
 - Minimal HTML emails inherit the app theme in dark mode for readability.
+- install.sh now requires QUAIL_DOMAINS to be explicitly configured; upgrade warns if missing.
 
 ### Fixed
 

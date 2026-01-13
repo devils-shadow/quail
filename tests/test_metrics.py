@@ -62,7 +62,7 @@ def test_ingest_metrics_last_24h(tmp_path) -> None:
     _insert_message(
         db_path,
         received_at=now - timedelta(hours=1),
-        envelope_rcpt="inbox@m.cst.ro",
+        envelope_rcpt="inbox@mail.example.test",
         from_addr="Alice <alice@example.com>",
         status="INBOX",
         quarantined=0,
@@ -70,7 +70,7 @@ def test_ingest_metrics_last_24h(tmp_path) -> None:
     _insert_message(
         db_path,
         received_at=now - timedelta(hours=2),
-        envelope_rcpt="quarantine@m.cst.ro",
+        envelope_rcpt="quarantine@mail.example.test",
         from_addr="Bob <bob@sample.com>",
         status="QUARANTINE",
         quarantined=1,
@@ -78,7 +78,7 @@ def test_ingest_metrics_last_24h(tmp_path) -> None:
     _insert_message(
         db_path,
         received_at=now - timedelta(hours=3),
-        envelope_rcpt="drop@m.cst.ro",
+        envelope_rcpt="drop@mail.example.test",
         from_addr="Eve <eve@example.com>",
         status="DROP",
         quarantined=1,
@@ -86,7 +86,7 @@ def test_ingest_metrics_last_24h(tmp_path) -> None:
     _insert_message(
         db_path,
         received_at=now - timedelta(days=2),
-        envelope_rcpt="old@m.cst.ro",
+        envelope_rcpt="old@mail.example.test",
         from_addr="Old <old@old.com>",
         status="INBOX",
         quarantined=0,

@@ -1,7 +1,8 @@
 # Quail
 
-Quail is a self-hosted, receive-only mail sink for CST QA/dev teams. It accepts
-inbound mail on `m.cst.ro` and exposes a private shared inbox UI. See
+Quail is a self-hosted, receive-only mail sink for internal QA/dev teams. It
+accepts inbound mail on configured domains (example: `mail.example.test`) and
+exposes a private shared inbox UI. See
 `QUAIL_CODEX_CONTEXT.md` for the authoritative requirements and constraints.
 
 ## Status
@@ -34,9 +35,9 @@ release updates.
 Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
 needed. The default bind host in the example config is `127.0.0.1`, so the
 service binds to localhost unless you change it; use a reverse proxy and DNS if
-you need external access. `QUAIL_DOMAINS` controls the comma-separated list of
-domains that `install.sh` registers in Postfix transport maps and relay domains
-(default: `m.cst.ro`).
+you need external access. Set `QUAIL_DOMAINS` to a comma-separated list of
+domains that `install.sh` registers in Postfix transport maps and relay
+domains; the installer will fail fast if you leave the example value in place.
 
 ## Admin access
 
@@ -61,5 +62,5 @@ domains that `install.sh` registers in Postfix transport maps and relay domains
 ## Install location
 
 The install script and systemd units assume the repository is cloned to
-`/opt/quail`. If you want to install from `/home/cst`, you must update
+`/opt/quail`. If you want to install from `/home/user`, you must update
 `install.sh` and the systemd unit paths accordingly before running install.

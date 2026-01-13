@@ -5,7 +5,7 @@ This runbook provides step‑by‑step instructions for installing, configuring,
 ## Installation
 
 1. **Clone the repository** on the target host (a spare laptop running Ubuntu Server as assumed in the context).
-2. **Create configuration:** Copy `config/config.example.env` to `/etc/quail/config.env` and adjust the values. By default the service binds to `127.0.0.1`; if external access is required, expose it via a reverse proxy and VPN【819940561035949†L23-L26】.
+2. **Create configuration:** Copy `config/config.example.env` to `/etc/quail/config.env` and adjust the values. Replace the example `QUAIL_DOMAINS` with the comma-separated list of domains you want Postfix to accept.
 3. **Run the installer:** Execute `sudo ./install.sh`. The script will:
    - Install necessary OS packages.
    - Create a system user and the `/var/lib/quail/{eml,att}` directories.
@@ -44,7 +44,7 @@ To upgrade Quail to a newer version:
 
 - **Service fails to start:** Check `/var/log/syslog` for errors. Common issues include invalid configuration values or missing directories. Ensure that Postfix is piping messages to `scripts/quail-ingest` as expected【819940561035949†L14-L16】.
 - **Email not ingested:** Verify that Postfix is configured to accept mail for
-  `m.cst.ro` via `relay_domains` and `transport_maps`, and that the ingest
+  configured domains via `relay_domains` and `transport_maps`, and that the ingest
   script has execute permission.
 - **Admin PIN lost:** Reset the PIN by updating the `admin_pin_hash` in the SQLite settings table. Use a secure Argon2 hash generator.
 - **Attachment quarantined unexpectedly:** Check the allowed MIME types in the settings and adjust as necessary【104907567664902†L71-L78】.

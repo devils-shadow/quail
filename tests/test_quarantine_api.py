@@ -49,7 +49,7 @@ def _insert_quarantined_message(db_path, eml_path, quarantine_reason: str) -> in
             """,
             (
                 now,
-                "user@m.cst.ro",
+                "user@mail.example.test",
                 "Sender <sender@example.com>",
                 "Quarantine test",
                 now,
