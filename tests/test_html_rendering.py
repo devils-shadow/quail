@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import html
+import re
+
 import pytest
 
 from quail import db, web
@@ -36,7 +39,10 @@ def test_message_detail_marks_minimal_html(tmp_path, monkeypatch) -> None:
         assert response.status_code == 200
         assert 'data-minimal="true"' in response.text
         assert 'data-tab="html"' in response.text
-        assert "<base" in response.text
+        match = re.search(r'srcdoc="([^"]+)"', response.text)
+        assert match is not None
+        srcdoc = html.unescape(match.group(1))
+        assert "<base" in srcdoc
 
 
 def test_message_detail_skips_minimal_marker_for_rich_html(tmp_path, monkeypatch) -> None:
