@@ -807,7 +807,11 @@ def _is_minimal_html(html_body: str | None) -> bool:
         return False
     if "<img" in normalized:
         return False
-    if "<style" in normalized or "style=" in normalized:
+    if "<svg" in normalized:
+        return False
+    if "<video" in normalized:
+        return False
+    if "<picture" in normalized:
         return False
     return True
 

@@ -918,7 +918,7 @@
               doc.documentElement.appendChild(style);
             }
           }
-          style.textContent = `a{color:${link};}`;
+          style.textContent = `html,body{background:${background}!important;color:${text}!important;}body *{color:${text}!important;}a{color:${link}!important;}`;
           return true;
         };
         const tryApply = () => {
