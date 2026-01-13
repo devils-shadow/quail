@@ -809,10 +809,6 @@ def _is_minimal_html(html_body: str | None) -> bool:
         return False
     if "<style" in normalized or "style=" in normalized:
         return False
-    if "class=" in normalized or "id=" in normalized:
-        return False
-    if "<div" in normalized:
-        return False
     return True
 
 
