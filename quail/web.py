@@ -18,6 +18,7 @@ from urllib.parse import quote
 
 import bleach
 import html2text
+
 try:
     from bleach.css_sanitizer import CSSSanitizer
 except ImportError:  # pragma: no cover - depends on optional dependency
@@ -1017,9 +1018,7 @@ async def attachment_download(
 
 
 @app.get("/message/{message_id}/inline/{content_id}")
-async def inline_attachment(
-    request: Request, message_id: int, content_id: str
-) -> Response:
+async def inline_attachment(request: Request, message_id: int, content_id: str) -> Response:
     settings = get_settings()
     is_admin = _is_admin(request)
     message = _get_message(settings.db_path, message_id)
