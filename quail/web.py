@@ -963,6 +963,7 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "is_admin": is_admin,
             "allow_html": allow_html,
             "current_inbox": request.query_params.get("inbox") or "",
+            "body_class": "message-view",
         },
     )
 

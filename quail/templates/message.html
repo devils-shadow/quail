@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
+<div class="message-page">
 {% set inbox_query = "" %}
 {% if current_inbox %}
 {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
@@ -100,5 +101,6 @@
       {% endif %}
     </section>
   </div>
+</div>
 </div>
 {% endblock %}

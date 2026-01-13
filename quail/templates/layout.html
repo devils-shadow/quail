@@ -180,6 +180,60 @@
         padding: 24px 40px 48px;
       }
 
+      body.message-view {
+        overflow: hidden;
+      }
+
+      body.message-view .app-shell {
+        height: 100vh;
+      }
+
+      body.message-view .main-content {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      body.message-view .message-page {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      body.message-view .tabs-container {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      body.message-view .message-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+
+      body.message-view .tab-panel {
+        min-height: 0;
+      }
+
+      body.message-view .tab-panel.active {
+        flex: 1;
+      }
+
+      body.message-view .message-html--full {
+        height: 100%;
+      }
+
+      body.message-view .message-html-frame {
+        height: 100%;
+        min-height: 0;
+      }
+
       .page-header {
         display: flex;
         align-items: center;
@@ -717,7 +771,10 @@
       }
     </style>
   </head>
-  <body data-current-inbox="{{ current_inbox | default('') }}">
+  <body
+    class="{{ body_class | default('') }}"
+    data-current-inbox="{{ current_inbox | default('') }}"
+  >
     <div class="app-shell">
       {% if show_sidebar | default(true) %}
       <aside class="sidebar">
@@ -826,30 +883,6 @@
 
       initTabs();
 
-      const fitMessageIframe = () => {
-        const container = document.querySelector("[data-message-tabs]");
-        if (!container) {
-          return;
-        }
-        const iframe = container.querySelector(".message-html-frame");
-        if (!iframe) {
-          return;
-        }
-        const top = iframe.getBoundingClientRect().top;
-        const maxHeight = window.innerHeight - top - 24;
-        if (maxHeight <= 200) {
-          return;
-        }
-        iframe.style.height = `${Math.floor(maxHeight)}px`;
-        iframe.dataset.fitted = "true";
-      };
-
-      const scheduleFit = () => {
-        window.requestAnimationFrame(fitMessageIframe);
-      };
-
-      scheduleFit();
-      window.addEventListener("resize", scheduleFit);
     </script>
   </body>
 </html>
