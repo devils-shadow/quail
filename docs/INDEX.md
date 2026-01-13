@@ -10,3 +10,5 @@
 - [Change Log](../CHANGELOG.md): A human‑readable history of changes.
 - [Todo List](../TODO.md): Outstanding tasks and areas requiring attention.
 - [Architecture Decision Records](adr/0000-template.md): Template and directory for recording architectural decisions.
+  - [ADR 0001: HTML Rendering Model](adr/0001-html-rendering-model.md)
+  - [ADR 0002: Inbox WebSocket Upgrade](adr/0002-inbox-websocket-upgrade.md)

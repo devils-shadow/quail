@@ -133,6 +133,24 @@ When uncertain, Codex must ask before acting.
 
 ---
 
+## Architecture Decision Records (ADRs)
+
+Major architectural changes should be captured in `docs/adr/`. Use the template
+in `docs/adr/0000-template.md` and keep ADRs brief. Current ADRs include:
+
+- `docs/adr/0001-html-rendering-model.md`
+- `docs/adr/0002-inbox-websocket-upgrade.md`
+
+---
+
+## Web Codex Notes
+
+This repository is primarily operated in a local WSL environment. If Codex is
+running in a web sandbox (no systemd access), avoid service management and focus
+on documentation or static UI edits only. When in doubt, ask before acting.
+
+---
+
 ## Guiding Principle
 
 Quail prioritizes **operational safety**, **predictable behavior**, and **boring correctness**.
