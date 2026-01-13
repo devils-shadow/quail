@@ -51,7 +51,22 @@ if command -v postconf >/dev/null 2>&1; then
     source /etc/quail/config.env
     set +a
   fi
-  domains_raw="${QUAIL_DOMAINS:-m.cst.ro}"
+  if [[ -z "${QUAIL_DOMAINS:-}" || "${QUAIL_DOMAINS}" == "mail.example.test" ]]; then
+    cat <<'EOF' >&2
+========================================
+ERROR: QUAIL_DOMAINS is not set (or still the example value).
+========================================
+
+Quail requires at least one real mail domain to be configured before installation.
+Set QUAIL_DOMAINS in /etc/quail/config.env, for example:
+
+  QUAIL_DOMAINS=mail.example.test
+
+Then re-run: sudo ./install.sh
+EOF
+    exit 1
+  fi
+  domains_raw="${QUAIL_DOMAINS}"
   IFS=',' read -r -a domain_list <<< "${domains_raw}"
   quail_domains=()
   for domain_entry in "${domain_list[@]}"; do
@@ -61,7 +76,8 @@ if command -v postconf >/dev/null 2>&1; then
     fi
   done
   if [[ ${#quail_domains[@]} -eq 0 ]]; then
-    quail_domains=("m.cst.ro")
+    echo "ERROR: QUAIL_DOMAINS is empty after parsing; check /etc/quail/config.env." >&2
+    exit 1
   fi
   quail_domains_string="${quail_domains[*]}"
   max_size_mb="${QUAIL_MAX_MESSAGE_SIZE_MB:-10}"

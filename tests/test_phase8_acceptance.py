@@ -6,10 +6,14 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from quail import db, ingest, purge, settings
 from quail.web import app
+
+pytestmark = [pytest.mark.integration, pytest.mark.api]
 
 
 @contextmanager
@@ -33,7 +37,7 @@ def _configure_settings(tmp_path, monkeypatch):
 def _build_message(subject: str, sender: str = "sender@example.com") -> EmailMessage:
     message = EmailMessage()
     message["From"] = sender
-    message["To"] = "user@m.cst.ro"
+    message["To"] = "user@mail.example.test"
     message["Subject"] = subject
     message.set_content("Test body")
     return message
@@ -100,7 +104,7 @@ def test_acceptance_open_delivers_to_inbox(tmp_path, monkeypatch) -> None:
     db.init_db(settings_obj.db_path)
     ingest.REGEX_CACHE.clear()
 
-    _ingest_message("user@m.cst.ro", "Open delivers")
+    _ingest_message("user@mail.example.test", "Open delivers")
 
     with db.get_connection(settings_obj.db_path) as conn:
         row = conn.execute(
@@ -118,14 +122,14 @@ def test_acceptance_paused_blocks_new_inbox_entries(tmp_path, monkeypatch) -> No
 
     db.upsert_domain_policy(
         settings_obj.db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "PAUSED",
         "INBOX",
         None,
         datetime.now(tz=timezone.utc).isoformat(),
     )
 
-    _ingest_message("user@m.cst.ro", "Paused policy")
+    _ingest_message("user@mail.example.test", "Paused policy")
 
     with db.get_connection(settings_obj.db_path) as conn:
         row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
@@ -140,14 +144,14 @@ def test_acceptance_restricted_requires_allow_rules(tmp_path, monkeypatch) -> No
 
     db.upsert_domain_policy(
         settings_obj.db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "RESTRICTED",
         "INBOX",
         None,
         datetime.now(tz=timezone.utc).isoformat(),
     )
 
-    _ingest_message("user@m.cst.ro", "Restricted without allow")
+    _ingest_message("user@mail.example.test", "Restricted without allow")
 
     with db.get_connection(settings_obj.db_path) as conn:
         row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
@@ -156,7 +160,7 @@ def test_acceptance_restricted_requires_allow_rules(tmp_path, monkeypatch) -> No
 
     db.create_address_rule(
         settings_obj.db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "ALLOW",
         "RCPT_LOCALPART",
         r"^user$",
@@ -167,7 +171,7 @@ def test_acceptance_restricted_requires_allow_rules(tmp_path, monkeypatch) -> No
         datetime.now(tz=timezone.utc).isoformat(),
     )
 
-    _ingest_message("user@m.cst.ro", "Restricted with allow")
+    _ingest_message("user@mail.example.test", "Restricted with allow")
 
     with db.get_connection(settings_obj.db_path) as conn:
         row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
@@ -182,7 +186,7 @@ def test_acceptance_block_rules_default_to_quarantine(tmp_path, monkeypatch) -> 
 
     db.upsert_domain_policy(
         settings_obj.db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "OPEN",
         "INBOX",
         None,
@@ -190,7 +194,7 @@ def test_acceptance_block_rules_default_to_quarantine(tmp_path, monkeypatch) -> 
     )
     db.create_address_rule(
         settings_obj.db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "BLOCK",
         "SUBJECT",
         r"spam",
@@ -201,7 +205,7 @@ def test_acceptance_block_rules_default_to_quarantine(tmp_path, monkeypatch) -> 
         datetime.now(tz=timezone.utc).isoformat(),
     )
 
-    _ingest_message("user@m.cst.ro", "spam message")
+    _ingest_message("user@mail.example.test", "spam message")
 
     with db.get_connection(settings_obj.db_path) as conn:
         row = conn.execute("SELECT status FROM messages ORDER BY id DESC LIMIT 1").fetchone()
@@ -220,7 +224,7 @@ def test_acceptance_quarantine_restore(tmp_path, monkeypatch) -> None:
         message_id = _insert_message(
             settings_obj.db_path,
             received_at=datetime.now(tz=timezone.utc),
-            envelope_rcpt="user@m.cst.ro",
+            envelope_rcpt="user@mail.example.test",
             status="QUARANTINE",
             quarantined=1,
             eml_path=eml_path,
@@ -263,7 +267,7 @@ def test_acceptance_retention_purge(tmp_path, monkeypatch) -> None:
     inbox_message = _insert_message(
         settings_obj.db_path,
         received_at=now - timedelta(days=2),
-        envelope_rcpt="user@m.cst.ro",
+        envelope_rcpt="user@mail.example.test",
         status="INBOX",
         quarantined=0,
         eml_path=settings_obj.eml_dir / "inbox-expired.eml",
@@ -272,7 +276,7 @@ def test_acceptance_retention_purge(tmp_path, monkeypatch) -> None:
     quarantine_message = _insert_message(
         settings_obj.db_path,
         received_at=now - timedelta(days=2),
-        envelope_rcpt="user@m.cst.ro",
+        envelope_rcpt="user@mail.example.test",
         status="QUARANTINE",
         quarantined=1,
         eml_path=settings_obj.eml_dir / "quarantine-expired.eml",
@@ -325,7 +329,7 @@ def test_acceptance_inbox_ui_loads_under_expected_volume(tmp_path, monkeypatch) 
             _insert_message(
                 settings_obj.db_path,
                 received_at=now,
-                envelope_rcpt="user@m.cst.ro",
+                envelope_rcpt="user@mail.example.test",
                 status="INBOX",
                 quarantined=0,
                 eml_path=settings_obj.eml_dir / f"load-{index}.eml",

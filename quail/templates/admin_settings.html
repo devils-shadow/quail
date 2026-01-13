@@ -14,6 +14,12 @@
 {% if request.query_params.get("error") == "quarantine_retention" %}
 <p>Quarantine retention must be a positive number.</p>
 {% endif %}
+{% if request.query_params.get("error") == "pin_length" %}
+<p>Admin PIN must be 4-9 digits.</p>
+{% endif %}
+{% if request.query_params.get("error") == "pin_format" %}
+<p>Admin PIN must contain digits only.</p>
+{% endif %}
 {% if request.query_params.get("domain_saved") %}
 <p>Domain policy saved for {{ request.query_params.get("domain_saved") }}.</p>
 {% endif %}
@@ -67,12 +73,20 @@
     />
   </div>
   <div>
-    <label for="allow_html">Allow sanitized HTML rendering</label>
+    <label for="allow_html">Allow HTML rendering (full)</label>
     <input id="allow_html" name="allow_html" type="checkbox" value="true" {% if allow_html %}checked{% endif %} />
   </div>
   <div>
     <label for="admin_pin">Update admin PIN (leave blank to keep)</label>
-    <input id="admin_pin" name="admin_pin" type="password" />
+    <input
+      id="admin_pin"
+      name="admin_pin"
+      type="password"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      minlength="4"
+      maxlength="9"
+    />
   </div>
   <button type="submit">Save settings</button>
 </form>
@@ -119,7 +133,15 @@
       </div>
       <div>
         <label for="pin_{{ loop.index }}">Admin PIN</label>
-        <input id="pin_{{ loop.index }}" name="admin_pin" type="password" />
+        <input
+          id="pin_{{ loop.index }}"
+          name="admin_pin"
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          minlength="4"
+          maxlength="9"
+        />
       </div>
       <button type="submit">Save</button>
     </fieldset>
@@ -157,7 +179,15 @@
   </div>
   <div>
     <label for="domain_policy_pin">Admin PIN</label>
-    <input id="domain_policy_pin" name="admin_pin" type="password" />
+    <input
+      id="domain_policy_pin"
+      name="admin_pin"
+      type="password"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      minlength="4"
+      maxlength="9"
+    />
   </div>
   <button type="submit">Save domain policy</button>
 </form>
@@ -247,7 +277,15 @@
         </td>
         <td>{{ rule.updated_at }}</td>
         <td>
-          <input form="rule_form_{{ rule.id }}" name="admin_pin" type="password" />
+          <input
+            form="rule_form_{{ rule.id }}"
+            name="admin_pin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            minlength="4"
+            maxlength="9"
+          />
         </td>
         <td>
           <button form="rule_form_{{ rule.id }}" type="submit">Save</button>
@@ -313,7 +351,15 @@
     </div>
     <div>
       <label for="admin_pin_new">Admin PIN</label>
-      <input id="admin_pin_new" name="admin_pin" type="password" />
+      <input
+        id="admin_pin_new"
+        name="admin_pin"
+        type="password"
+        inputmode="numeric"
+      pattern="[0-9]*"
+        minlength="4"
+        maxlength="9"
+      />
     </div>
     <button type="submit">Add rule</button>
   </form>
@@ -331,7 +377,15 @@
     </div>
     <div>
       <label for="admin_pin_test">Admin PIN</label>
-      <input id="admin_pin_test" name="admin_pin" type="password" />
+      <input
+        id="admin_pin_test"
+        name="admin_pin"
+        type="password"
+        inputmode="numeric"
+      pattern="[0-9]*"
+        minlength="4"
+        maxlength="9"
+      />
     </div>
     <button type="submit">Test pattern</button>
   </form>

@@ -6,7 +6,11 @@ import json
 from datetime import datetime, timezone
 from email.message import EmailMessage
 
+import pytest
+
 from quail import db, ingest, settings
+
+pytestmark = pytest.mark.unit
 
 
 def _now_iso() -> str:
@@ -66,7 +70,7 @@ def _insert_address_rule(
 def _build_message(subject: str = "Hello", from_addr: str = "sender@example.com") -> EmailMessage:
     message = EmailMessage()
     message["From"] = from_addr
-    message["To"] = "user@m.cst.ro"
+    message["To"] = "user@mail.example.test"
     message["Subject"] = subject
     message.set_content("Test body")
     return message
@@ -89,7 +93,7 @@ def test_open_default_routes_to_inbox(tmp_path, monkeypatch):
     db.init_db(db_path)
     ingest.REGEX_CACHE.clear()
 
-    decision = ingest.determine_ingest_decision(db_path, "user@m.cst.ro", _build_message())
+    decision = ingest.determine_ingest_decision(db_path, "user@mail.example.test", _build_message())
 
     assert decision.status == "INBOX"
     assert decision.quarantine_reason is None
@@ -100,8 +104,8 @@ def test_paused_policy_routes_to_drop_or_quarantine(tmp_path, monkeypatch):
     db.init_db(db_path)
     ingest.REGEX_CACHE.clear()
 
-    _insert_domain_policy(db_path, "m.cst.ro", "PAUSED", "INBOX")
-    decision = ingest.determine_ingest_decision(db_path, "user@m.cst.ro", _build_message())
+    _insert_domain_policy(db_path, "mail.example.test", "PAUSED", "INBOX")
+    decision = ingest.determine_ingest_decision(db_path, "user@mail.example.test", _build_message())
     assert decision.status == "DROP"
 
     _insert_domain_policy(db_path, "paused.example", "PAUSED", "QUARANTINE")
@@ -114,20 +118,20 @@ def test_restricted_requires_allow_rule(tmp_path, monkeypatch):
     db.init_db(db_path)
     ingest.REGEX_CACHE.clear()
 
-    _insert_domain_policy(db_path, "m.cst.ro", "RESTRICTED", "INBOX")
-    decision = ingest.determine_ingest_decision(db_path, "user@m.cst.ro", _build_message())
+    _insert_domain_policy(db_path, "mail.example.test", "RESTRICTED", "INBOX")
+    decision = ingest.determine_ingest_decision(db_path, "user@mail.example.test", _build_message())
     assert decision.status == "QUARANTINE"
 
     _insert_address_rule(
         db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "ALLOW",
         "RCPT_LOCALPART",
         r"^user$",
         priority=1,
         action="INBOX",
     )
-    decision = ingest.determine_ingest_decision(db_path, "user@m.cst.ro", _build_message())
+    decision = ingest.determine_ingest_decision(db_path, "user@mail.example.test", _build_message())
     assert decision.status == "INBOX"
 
 
@@ -136,10 +140,10 @@ def test_priority_first_match_wins(tmp_path, monkeypatch):
     db.init_db(db_path)
     ingest.REGEX_CACHE.clear()
 
-    _insert_domain_policy(db_path, "m.cst.ro", "OPEN", "INBOX")
+    _insert_domain_policy(db_path, "mail.example.test", "OPEN", "INBOX")
     first_rule_id = _insert_address_rule(
         db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "BLOCK",
         "SUBJECT",
         r"promo",
@@ -148,7 +152,7 @@ def test_priority_first_match_wins(tmp_path, monkeypatch):
     )
     _insert_address_rule(
         db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "ALLOW",
         "SUBJECT",
         r"promo",
@@ -157,7 +161,7 @@ def test_priority_first_match_wins(tmp_path, monkeypatch):
     )
 
     decision = ingest.determine_ingest_decision(
-        db_path, "user@m.cst.ro", _build_message(subject="promo")
+        db_path, "user@mail.example.test", _build_message(subject="promo")
     )
 
     assert decision.status == "DROP"
@@ -169,10 +173,10 @@ def test_ingest_persists_decision_fields(tmp_path, monkeypatch):
     db.init_db(db_path)
     ingest.REGEX_CACHE.clear()
 
-    _insert_domain_policy(db_path, "m.cst.ro", "OPEN", "QUARANTINE")
+    _insert_domain_policy(db_path, "mail.example.test", "OPEN", "QUARANTINE")
     rule_id = _insert_address_rule(
         db_path,
-        "m.cst.ro",
+        "mail.example.test",
         "BLOCK",
         "FROM_DOMAIN",
         r"example.com",
@@ -181,7 +185,7 @@ def test_ingest_persists_decision_fields(tmp_path, monkeypatch):
     )
 
     message = _build_message()
-    ingest.ingest(message.as_bytes(), "user@m.cst.ro")
+    ingest.ingest(message.as_bytes(), "user@mail.example.test")
 
     with db.get_connection(db_path) as conn:
         row = conn.execute(

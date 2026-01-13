@@ -4,7 +4,7 @@ This document acts as the "Codex Constitution" for the **Quail** project. All ta
 
 ## Project Purpose
 
-Quail is a self‑hosted, **receive‑only email sink** for CST QA/dev teams. It accepts inbound email on the `m.cst.ro` domain and exposes a private, shared inbox UI available only over VPN or explicitly configured private networks【104907567664902†L10-L16】. Quail **does not send email** under any circumstances and is designed for low volume, single‑operator environments【104907567664902†L17-L20】. No SaaS services are used and there are no per‑user accounts; all viewers share a common inbox【104907567664902†L17-L31】. The full specification, including non‑negotiable requirements and architecture, lives in `QUAIL_CODEX_CONTEXT.md`.
+Quail is a self‑hosted, **receive‑only email sink** for internal QA/dev teams. It accepts inbound email on configured domains (example: `mail.example.test`) and exposes a private, shared inbox UI available only over VPN or explicitly configured private networks. Quail **does not send email** under any circumstances and is designed for low volume, single‑operator environments. No SaaS services are used and there are no per‑user accounts; all viewers share a common inbox. The full specification, including non‑negotiable requirements and architecture, lives in `QUAIL_CODEX_CONTEXT.md`.
 
 ## Definition of Done
 

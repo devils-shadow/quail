@@ -21,6 +21,17 @@ if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
   python3 -m venv "${INSTALL_DIR}/venv"
 fi
 
+if [[ -f /etc/quail/config.env ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  source /etc/quail/config.env
+  set +a
+fi
+if [[ -z "${QUAIL_DOMAINS:-}" ]]; then
+  echo "WARNING: QUAIL_DOMAINS is not set in /etc/quail/config.env." >&2
+  echo "Upgrades will continue, but new installs require this value to be configured." >&2
+fi
+
 "${INSTALL_DIR}/venv/bin/pip" install --upgrade pip
 "${INSTALL_DIR}/venv/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
 

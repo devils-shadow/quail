@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
 from collections import Counter
@@ -16,9 +17,16 @@ from typing import Iterable
 from urllib.parse import quote
 
 import bleach
+import html2text
+
+try:
+    from bleach.css_sanitizer import CSSSanitizer
+except ImportError:  # pragma: no cover - depends on optional dependency
+    CSSSanitizer = None
 from argon2.exceptions import InvalidHash, VerifyMismatchError
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.status import HTTP_303_SEE_OTHER
 
@@ -40,20 +48,29 @@ ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
 QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
 ALLOW_HTML_KEY = "allow_html"
+ALLOW_RICH_HTML_KEY = "allow_rich_html"
+ALLOW_FULL_HTML_KEY = "allow_full_html"
 DEFAULT_ALLOWED_MIME_TYPES_VALUE = ",".join(DEFAULT_ALLOWED_MIME_TYPES)
 DEFAULT_RETENTION_DAYS = "30"
 DEFAULT_QUARANTINE_RETENTION_DAYS = "3"
 DEFAULT_ALLOW_HTML = "false"
+DEFAULT_ALLOW_RICH_HTML = "false"
+DEFAULT_ALLOW_FULL_HTML = "false"
 ADMIN_SESSION_COOKIE = "quail_admin_session"
 ADMIN_SESSION_TTL = timedelta(minutes=20)
 ADMIN_RATE_LIMIT_WINDOW = timedelta(minutes=15)
 ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+ADMIN_PIN_MAX_LEN = 9
+ADMIN_PIN_MIN_LEN = 4
 MAX_LIST_ROWS = 200
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+BASE_DIR = Path(__file__).parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -81,6 +98,10 @@ def _init_settings(settings_path: Path) -> None:
         )
     if db.get_setting(settings_path, ALLOW_HTML_KEY) is None:
         db.set_setting(settings_path, ALLOW_HTML_KEY, DEFAULT_ALLOW_HTML)
+    if db.get_setting(settings_path, ALLOW_RICH_HTML_KEY) is None:
+        db.set_setting(settings_path, ALLOW_RICH_HTML_KEY, DEFAULT_ALLOW_RICH_HTML)
+    if db.get_setting(settings_path, ALLOW_FULL_HTML_KEY) is None:
+        db.set_setting(settings_path, ALLOW_FULL_HTML_KEY, DEFAULT_ALLOW_FULL_HTML)
 
 
 def _get_admin_pin_hash(settings_db_path: Path) -> str | None:
@@ -356,6 +377,10 @@ def _require_admin_session(request: Request) -> RedirectResponse | None:
 def _verify_admin_pin(db_path: Path, admin_pin: str | None) -> bool:
     if not admin_pin:
         return False
+    if len(admin_pin) > ADMIN_PIN_MAX_LEN or len(admin_pin) < ADMIN_PIN_MIN_LEN:
+        return False
+    if not admin_pin.isdigit():
+        return False
     stored_hash = _get_admin_pin_hash(db_path)
     if not stored_hash:
         return False
@@ -384,6 +409,19 @@ def _escape_like(value: str) -> str:
 
 def _to_like_pattern(value: str) -> str:
     return _escape_like(value).replace("*", "%")
+
+
+def _build_inbox_filter_condition(inbox_filter: str) -> tuple[str, str]:
+    cleaned = inbox_filter.strip().lower()
+    if "@" in cleaned:
+        if "*" in cleaned:
+            return "LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'", _to_like_pattern(cleaned)
+        return "LOWER(envelope_rcpt) = ?", cleaned
+    if "*" in cleaned:
+        local_pattern = _to_like_pattern(cleaned)
+    else:
+        local_pattern = f"%{_escape_like(cleaned)}%"
+    return "LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'", f"{local_pattern}@%"
 
 
 def _extract_primary_address(raw_value: str | None) -> str | None:
@@ -576,12 +614,9 @@ def _iter_messages(
     if not include_quarantined:
         conditions.append("quarantined = 0")
     if inbox_filter:
-        if "*" in inbox_filter:
-            conditions.append("envelope_rcpt LIKE ? ESCAPE '\\'")
-            params.append(_to_like_pattern(inbox_filter))
-        else:
-            conditions.append("envelope_rcpt = ?")
-            params.append(inbox_filter)
+        condition, value = _build_inbox_filter_condition(inbox_filter)
+        conditions.append(condition)
+        params.append(value)
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.append(MAX_LIST_ROWS)
     with db.get_connection(db_path) as conn:
@@ -609,7 +644,7 @@ def _get_message_attachments(db_path: Path, message_id: int) -> list[dict[str, s
     with db.get_connection(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT filename, stored_path, content_type, size_bytes
+            SELECT id, filename, stored_path, content_type, size_bytes
             FROM attachments
             WHERE message_id = ?
             """,
@@ -618,30 +653,170 @@ def _get_message_attachments(db_path: Path, message_id: int) -> list[dict[str, s
     return [dict(row) for row in rows]
 
 
-def _sanitize_html(html_body: str) -> str:
-    allowed_tags = [
-        "a",
-        "p",
-        "br",
-        "strong",
-        "em",
-        "ul",
-        "ol",
-        "li",
-        "blockquote",
-        "code",
-        "pre",
-    ]
-    allowed_attributes = {
-        "a": ["href", "title", "rel"],
-    }
+_HTML_BLOCK_RE = re.compile(r"(?is)<(script|style|head|title|meta|link)[^>]*>.*?</\1>")
+_HTML_SINGLE_TAG_RE = re.compile(r"(?is)<(meta|link)(?:\\s[^>]*)?>")
+
+_MINIMAL_ALLOWED_TAGS = [
+    "a",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+]
+_RICH_ALLOWED_TAGS = [
+    "a",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "div",
+    "span",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "td",
+    "th",
+    "hr",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+]
+_RICH_CSS_SANITIZER = (
+    CSSSanitizer(
+        allowed_css_properties=[
+            "color",
+            "background-color",
+            "font-family",
+            "font-size",
+            "font-weight",
+            "font-style",
+            "text-decoration",
+            "text-align",
+            "line-height",
+            "letter-spacing",
+            "margin",
+            "margin-left",
+            "margin-right",
+            "margin-top",
+            "margin-bottom",
+            "padding",
+            "padding-left",
+            "padding-right",
+            "padding-top",
+            "padding-bottom",
+            "border",
+            "border-top",
+            "border-right",
+            "border-bottom",
+            "border-left",
+            "border-collapse",
+            "border-spacing",
+            "width",
+            "max-width",
+            "min-width",
+            "height",
+            "max-height",
+            "min-height",
+            "display",
+            "vertical-align",
+            "white-space",
+        ]
+    )
+    if CSSSanitizer
+    else None
+)
+
+
+def _strip_html_blocks(html_body: str) -> str:
+    cleaned = _HTML_BLOCK_RE.sub("", html_body)
+    cleaned = _HTML_SINGLE_TAG_RE.sub("", cleaned)
+    return cleaned
+
+
+def _rich_attribute_filter(tag: str, name: str, value: str) -> bool:
+    if tag == "a" and name in ("href", "title", "rel", "target"):
+        return True
+    if tag in ("td", "th") and name in ("colspan", "rowspan"):
+        return True
+    if tag in ("table", "td", "th") and name in ("width", "height", "align", "valign", "border"):
+        return True
+    if name == "style":
+        return True
+    return False
+
+
+def _sanitize_html(html_body: str, rich: bool) -> str:
+    cleaned = _strip_html_blocks(html_body)
+    if rich:
+        if _RICH_CSS_SANITIZER is None:
+            LOGGER.warning(
+                "Rich HTML enabled but tinycss2 is missing; falling back to minimal sanitize."
+            )
+            rich = False
+        else:
+            return bleach.clean(
+                cleaned,
+                tags=_RICH_ALLOWED_TAGS,
+                attributes=_rich_attribute_filter,
+                protocols=["http", "https", "mailto"],
+                strip=True,
+                css_sanitizer=_RICH_CSS_SANITIZER,
+            )
     return bleach.clean(
-        html_body,
-        tags=allowed_tags,
-        attributes=allowed_attributes,
+        cleaned,
+        tags=_MINIMAL_ALLOWED_TAGS,
+        attributes={"a": ["href", "title", "rel"]},
         protocols=["http", "https", "mailto"],
         strip=True,
     )
+
+
+def _build_full_html_srcdoc(html_body: str, message_id: int) -> str:
+    def repl(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        cid = match.group(2)
+        target = quote(cid.strip("<>"), safe="")
+        return f'{attr}="/message/{message_id}/inline/{target}"'
+
+    rewritten = re.sub(r'(?i)\b(src|href)=["\']cid:([^"\']+)["\']', repl, html_body)
+    base_tag = '<base target="_blank" rel="noopener noreferrer">'
+    if re.search(r"(?i)<head[^>]*>", rewritten):
+        return re.sub(r"(?i)<head[^>]*>", lambda m: f"{m.group(0)}{base_tag}", rewritten, 1)
+    return f"{base_tag}{rewritten}"
+
+
+def _is_minimal_html(html_body: str | None) -> bool:
+    if not html_body:
+        return True
+    normalized = html_body.lower()
+    if "<table" in normalized:
+        return False
+    if "<img" in normalized:
+        return False
+    if "<svg" in normalized:
+        return False
+    if "<video" in normalized:
+        return False
+    if "<picture" in normalized:
+        return False
+    return True
 
 
 def _delete_path(path: Path) -> None:
@@ -688,36 +863,35 @@ def _update_message_status(settings_db_path: Path, message_id: int, status: str)
         conn.commit()
 
 
-def _parse_message_body(
-    eml_path: Path, allow_html: bool
-) -> tuple[str, list[dict[str, str]], str | None]:
+def _html_to_text(html_body: str) -> str:
+    converter = html2text.HTML2Text()
+    converter.ignore_links = False
+    converter.ignore_images = True
+    converter.body_width = 0
+    text = converter.handle(html_body or "")
+    return text.strip()
+
+
+def _parse_message_body(eml_path: Path, allow_html: bool) -> tuple[str, str | None]:
     raw_bytes = eml_path.read_bytes()
     message = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     body = ""
     html_body: str | None = None
-    attachments: list[dict[str, str]] = []
     for part in message.walk():
         disposition = part.get_content_disposition()
         filename = part.get_filename()
-        content_type = part.get_content_type()
-        payload = part.get_payload(decode=True)
-        size = len(payload) if payload else 0
         if disposition == "attachment" or filename:
-            attachments.append(
-                {
-                    "filename": filename or "unnamed",
-                    "content_type": content_type,
-                    "size": str(size),
-                }
-            )
             continue
         if not body and part.get_content_type() == "text/plain":
             body = part.get_content()
-        if allow_html and html_body is None and part.get_content_type() == "text/html":
+        if html_body is None and part.get_content_type() == "text/html":
             html_body = part.get_content()
     if not body:
-        body = "(No plaintext body found.)"
-    return body, attachments, html_body
+        if html_body:
+            body = _html_to_text(html_body) or "(No plaintext body found.)"
+        else:
+            body = "(No plaintext body found.)"
+    return body, html_body
 
 
 @app.on_event("startup")
@@ -750,6 +924,41 @@ async def inbox(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/api/inbox", response_class=JSONResponse)
+async def inbox_api(request: Request) -> JSONResponse:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    inbox_filter = request.query_params.get("inbox")
+    if inbox_filter:
+        inbox_filter = inbox_filter.strip() or None
+    messages = _iter_messages(
+        settings.db_path, include_quarantined=is_admin, inbox_filter=inbox_filter
+    )
+    etag_source = json.dumps(
+        {
+            "is_admin": is_admin,
+            "inbox_filter": inbox_filter or "",
+            "messages": [
+                {
+                    "id": message.get("id"),
+                    "received_at": message.get("received_at"),
+                    "from_addr": message.get("from_addr"),
+                    "subject": message.get("subject"),
+                    "envelope_rcpt": message.get("envelope_rcpt"),
+                    "quarantined": message.get("quarantined"),
+                }
+                for message in messages
+            ],
+        },
+        sort_keys=True,
+        default=str,
+    )
+    etag = f"\"{hashlib.sha256(etag_source.encode('utf-8')).hexdigest()}\""
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return JSONResponse({"messages": messages, "is_admin": is_admin}, headers={"ETag": etag})
+
+
 @app.get("/message/{message_id}", response_class=HTMLResponse)
 async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     settings = get_settings()
@@ -758,21 +967,77 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
     allow_html = db.get_setting(settings.db_path, ALLOW_HTML_KEY) == "true"
-    body, attachments, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
-    sanitized_html = _sanitize_html(html_body) if allow_html and html_body else None
+    body, html_body = _parse_message_body(Path(message["eml_path"]), allow_html)
+    attachments = _get_message_attachments(settings.db_path, message_id)
+    full_html_srcdoc = None
+    if allow_html and html_body:
+        full_html_srcdoc = _build_full_html_srcdoc(html_body, message_id)
+    is_minimal_html = _is_minimal_html(html_body)
     return templates.TemplateResponse(
         "message.html",
         {
             "request": request,
             "message": message,
             "body": body,
-            "html_body": sanitized_html,
+            "html_srcdoc": full_html_srcdoc,
             "attachments": attachments,
             "is_admin": is_admin,
             "allow_html": allow_html,
             "current_inbox": request.query_params.get("inbox") or "",
+            "body_class": "message-view",
+            "is_minimal_html": is_minimal_html,
         },
     )
+
+
+@app.get("/message/{message_id}/attachments/{attachment_id}")
+async def attachment_download(
+    request: Request, message_id: int, attachment_id: int
+) -> FileResponse:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    message = _get_message(settings.db_path, message_id)
+    if message["quarantined"] and not is_admin:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    with db.get_connection(settings.db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT filename, stored_path, content_type
+            FROM attachments
+            WHERE id = ? AND message_id = ?
+            """,
+            (attachment_id, message_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Attachment not found.")
+    return FileResponse(
+        row["stored_path"],
+        media_type=row["content_type"],
+        filename=row["filename"],
+    )
+
+
+@app.get("/message/{message_id}/inline/{content_id}")
+async def inline_attachment(request: Request, message_id: int, content_id: str) -> Response:
+    settings = get_settings()
+    is_admin = _is_admin(request)
+    message = _get_message(settings.db_path, message_id)
+    if message["quarantined"] and not is_admin:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    eml_path = Path(message["eml_path"])
+    raw_bytes = eml_path.read_bytes()
+    parsed = BytesParser(policy=policy.default).parsebytes(raw_bytes)
+    target = content_id.strip("<>")
+    for part in parsed.walk():
+        part_cid = part.get("Content-ID")
+        if not part_cid:
+            continue
+        normalized = part_cid.strip("<>")
+        if normalized == target:
+            payload = part.get_payload(decode=True) or b""
+            content_type = part.get_content_type() or "application/octet-stream"
+            return Response(content=payload, media_type=content_type)
+    raise HTTPException(status_code=404, detail="Inline attachment not found.")
 
 
 @app.post("/admin/message/{message_id}/delete")
@@ -820,6 +1085,10 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
     now = _now()
     if _is_rate_limited(settings.db_path, source_ip, now):
         return RedirectResponse(url="/admin/unlock?error=rate_limited", status_code=303)
+    if len(pin) > ADMIN_PIN_MAX_LEN or len(pin) < ADMIN_PIN_MIN_LEN:
+        return RedirectResponse(url="/admin/unlock?error=pin_length", status_code=303)
+    if not pin.isdigit():
+        return RedirectResponse(url="/admin/unlock?error=pin_format", status_code=303)
 
     stored_hash = _get_admin_pin_hash(settings.db_path)
     pin_configured = bool(stored_hash)
@@ -961,7 +1230,17 @@ async def admin_settings_post(
         str(quarantine_retention_value),
     )
     db.set_setting(settings.db_path, ALLOW_HTML_KEY, "true" if allow_html else "false")
+    db.set_setting(settings.db_path, ALLOW_RICH_HTML_KEY, "false")
+    db.set_setting(settings.db_path, ALLOW_FULL_HTML_KEY, "false")
     if admin_pin:
+        if len(admin_pin) > ADMIN_PIN_MAX_LEN or len(admin_pin) < ADMIN_PIN_MIN_LEN:
+            return RedirectResponse(
+                url="/admin/settings?error=pin_length", status_code=HTTP_303_SEE_OTHER
+            )
+        if not admin_pin.isdigit():
+            return RedirectResponse(
+                url="/admin/settings?error=pin_format", status_code=HTTP_303_SEE_OTHER
+            )
         db.set_setting(settings.db_path, ADMIN_PIN_HASH_KEY, hash_pin(admin_pin))
         _log_admin_action(
             settings.db_path,

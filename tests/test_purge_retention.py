@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from quail import db, purge, settings
+
+pytestmark = pytest.mark.integration
 
 
 def _configure_settings(tmp_path, monkeypatch) -> None:
@@ -102,7 +106,7 @@ def test_purge_respects_quarantine_retention_overrides(tmp_path, monkeypatch) ->
     inbox_expired = _insert_message(
         settings_obj.db_path,
         received_at=now - timedelta(days=40),
-        envelope_rcpt="user@m.cst.ro",
+        envelope_rcpt="user@mail.example.test",
         status="INBOX",
         quarantined=0,
         eml_path=settings_obj.eml_dir / "inbox-expired.eml",
@@ -113,7 +117,7 @@ def test_purge_respects_quarantine_retention_overrides(tmp_path, monkeypatch) ->
     inbox_keep = _insert_message(
         settings_obj.db_path,
         received_at=now - timedelta(days=10),
-        envelope_rcpt="user@m.cst.ro",
+        envelope_rcpt="user@mail.example.test",
         status="INBOX",
         quarantined=0,
         eml_path=settings_obj.eml_dir / "inbox-keep.eml",

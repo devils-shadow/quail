@@ -76,7 +76,16 @@
   <div class="toolbar" style="margin-bottom: 16px; flex-wrap: wrap;">
     <div>
       <label for="admin_pin_quarantine">Admin PIN</label>
-      <input id="admin_pin_quarantine" class="input" name="admin_pin" type="password" />
+      <input
+        id="admin_pin_quarantine"
+        class="input"
+        name="admin_pin"
+        type="password"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        minlength="4"
+        maxlength="9"
+      />
     </div>
     <div>
       <label for="match_field_quarantine">Rule match field</label>

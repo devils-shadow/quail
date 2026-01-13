@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
 from quail import db, settings
+
+pytestmark = pytest.mark.unit
 
 
 def test_init_db_creates_tables(tmp_path):

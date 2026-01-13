@@ -5,10 +5,14 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from quail import db, settings
 from quail.web import app
+
+pytestmark = [pytest.mark.api, pytest.mark.integration]
 
 
 @contextmanager
@@ -49,7 +53,7 @@ def _insert_quarantined_message(db_path, eml_path, quarantine_reason: str) -> in
             """,
             (
                 now,
-                "user@m.cst.ro",
+                "user@mail.example.test",
                 "Sender <sender@example.com>",
                 "Quarantine test",
                 now,

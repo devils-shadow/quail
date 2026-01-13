@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from quail import settings
 from quail.web import app
+
+pytestmark = [pytest.mark.api, pytest.mark.integration]
 
 
 @contextmanager
@@ -29,7 +33,7 @@ def test_rules_require_admin_session(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         response = client.get(
             "/admin/rules",
-            params={"domain": "m.cst.ro"},
+            params={"domain": "mail.example.test"},
             headers={"accept": "application/json"},
         )
 
@@ -43,7 +47,7 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
         create_response = client.post(
             "/admin/rules",
             data={
-                "domain": "m.cst.ro",
+                "domain": "mail.example.test",
                 "rule_type": "ALLOW",
                 "match_field": "RCPT_LOCALPART",
                 "pattern": r"^user$",
@@ -57,12 +61,12 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
         assert create_response.status_code == 200
         payload = create_response.json()
         rule_id = payload["rule"]["id"]
-        assert payload["rule"]["domain"] == "m.cst.ro"
+        assert payload["rule"]["domain"] == "mail.example.test"
         assert payload["rule"]["rule_type"] == "ALLOW"
 
         list_response = client.get(
             "/admin/rules",
-            params={"domain": "m.cst.ro"},
+            params={"domain": "mail.example.test"},
             headers={"accept": "application/json"},
         )
         assert list_response.status_code == 200
@@ -112,7 +116,7 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
         bad_response = client.post(
             "/admin/rules",
             data={
-                "domain": "m.cst.ro",
+                "domain": "mail.example.test",
                 "rule_type": "ALLOW",
                 "match_field": "RCPT_LOCALPART",
                 "pattern": "[",
@@ -127,7 +131,7 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
         first_response = client.post(
             "/admin/rules",
             data={
-                "domain": "m.cst.ro",
+                "domain": "mail.example.test",
                 "rule_type": "ALLOW",
                 "match_field": "RCPT_LOCALPART",
                 "pattern": r"^first$",
@@ -139,7 +143,7 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
         second_response = client.post(
             "/admin/rules",
             data={
-                "domain": "m.cst.ro",
+                "domain": "mail.example.test",
                 "rule_type": "ALLOW",
                 "match_field": "RCPT_LOCALPART",
                 "pattern": r"^second$",
@@ -153,7 +157,7 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
 
         list_response = client.get(
             "/admin/rules",
-            params={"domain": "m.cst.ro"},
+            params={"domain": "mail.example.test"},
             headers={"accept": "application/json"},
         )
         rules = list_response.json()["rules"]

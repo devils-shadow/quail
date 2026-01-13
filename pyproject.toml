@@ -10,3 +10,11 @@ line-length = 100
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+markers = [
+  "unit: fast, isolated checks",
+  "api: FastAPI/TestClient coverage",
+  "integration: end-to-end workflows across modules",
+  "slow: long-running or heavy tests",
+]
