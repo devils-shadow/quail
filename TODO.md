@@ -8,3 +8,4 @@ A running list of outstanding tasks. Issues should be created for these items an
 - Expand automated coverage for ingest edge cases (multipart HTML, charsets, inline CID).
 - Consider admin rate-limit tests if the UI exposes rate-limit feedback.
 - Document a recommended reverse-proxy setup (nginx + OAuth2 example).
+- Migrate FastAPI startup to lifespan handlers and update `TemplateResponse` signature.

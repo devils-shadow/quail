@@ -5,6 +5,7 @@
 - [Testing](TESTING.md): Test markers, local commands, and CI expectations.
 - [Glossary](GLOSSARY.md): Definitions of domain‑specific terms used in this project.
 - [Status](STATUS.md): Current state of the project, known issues and next milestones.
+- [Deprecations](DEPRECATIONS.md): Framework deprecations and migration notes.
 - [Roadmap](ROADMAP.md): Planned features and near‑term objectives.
 - [Spam Mitigation Plan](archive/QUAIL_SPAM_MITIGATION_PLAN.md): Historical plan for spam-mitigation admin controls.
 - [WebSocket Inbox Plan](WEBSOCKET_INBOX_PLAN.md): Design workbook for inbox WebSocket updates.

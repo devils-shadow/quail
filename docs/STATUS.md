@@ -14,9 +14,13 @@ quarantine management is live, and retention policies are configurable.
 
 - DMARC support is not implemented (required for internet-facing deployments).
 - WebSocket inbox updates are planned; current refresh uses ETag-aware polling.
+- FastAPI `on_event` startup handler and Starlette `TemplateResponse` signature
+  deprecations are pending migration; see `docs/DEPRECATIONS.md`.
 
 ## Next Milestones
 
 - Evaluate DMARC integration for broader public deployment.
 - Implement WebSocket inbox updates per `docs/WEBSOCKET_INBOX_PLAN.md`.
 - Expand automated coverage and diagnostics for CI.
+- Plan a low-risk migration to FastAPI lifespan handlers and updated
+  `TemplateResponse` signatures.
