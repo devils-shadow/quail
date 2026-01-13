@@ -3,6 +3,9 @@
 Use this checklist to manually verify the Phase 8 acceptance criteria for the spam mitigation
 features. This mirrors the acceptance list in `docs/QUAIL_SPAM_MITIGATION_PLAN.md` (Phase 8).
 
+Automated coverage exists in `tests/test_phase8_acceptance.py`; use this checklist for
+manual spot-checks or release validation.
+
 ## Manual Checklist
 
 1. **OPEN delivers to Inbox**
