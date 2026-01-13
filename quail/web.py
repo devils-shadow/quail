@@ -765,7 +765,9 @@ def _sanitize_html(html_body: str, rich: bool) -> str:
     cleaned = _strip_html_blocks(html_body)
     if rich:
         if _RICH_CSS_SANITIZER is None:
-            LOGGER.warning("Rich HTML enabled but tinycss2 is missing; falling back to minimal sanitize.")
+            LOGGER.warning(
+                "Rich HTML enabled but tinycss2 is missing; falling back to minimal sanitize."
+            )
             rich = False
         else:
             return bleach.clean(
