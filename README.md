@@ -71,6 +71,11 @@ Use this checklist before running `install.sh`:
 
 - See `docs/TESTING.md` for pytest markers, standard commands, and CI coverage.
 
+## Deprecations
+
+- Framework deprecation notes and a minimal migration plan live in
+  `docs/DEPRECATIONS.md`.
+
 ## Install location
 
 The install script and systemd units assume the repository is cloned to
