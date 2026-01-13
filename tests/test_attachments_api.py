@@ -6,7 +6,12 @@ from email.message import EmailMessage
 
 import pytest
 
-from tests.helpers import build_client, build_email, insert_attachment, insert_message
+from tests.helpers import (
+    build_client,
+    build_email,
+    insert_attachment,
+    insert_message,
+)
 
 pytestmark = pytest.mark.api
 

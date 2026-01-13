@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 
 from quail import db
-from tests.helpers import build_client, build_email, insert_attachment, insert_message, unlock_admin
+from tests.helpers import (
+    build_client,
+    build_email,
+    insert_attachment,
+    insert_message,
+    unlock_admin,
+)
 
 pytestmark = pytest.mark.api
 
