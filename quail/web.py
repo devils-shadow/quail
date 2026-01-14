@@ -567,10 +567,7 @@ async def _ws_event_loop() -> None:
     last_event_id = db.get_last_inbox_event_id(settings.db_path)
     try:
         while True:
-            events = [
-                dict(row)
-                for row in db.list_inbox_events(settings.db_path, last_event_id)
-            ]
+            events = [dict(row) for row in db.list_inbox_events(settings.db_path, last_event_id)]
             if not events:
                 await asyncio.sleep(1)
                 continue
