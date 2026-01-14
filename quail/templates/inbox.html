@@ -10,18 +10,18 @@
     </button>
     <form method="get" action="/inbox">
       <input
-        class="input"
+        class="input round"
         type="text"
         name="inbox"
         value="{{ current_inbox | default('') }}"
         placeholder="Filter inbox (e.g. test or hamara*)"
       />
-      <button class="button square" type="submit">GO</button>
+      <button class="button square round" type="submit">GO</button>
     </form>
-    <button class="button secondary icon" id="trash-button" type="button" aria-label="Delete messages">
+    <button class="button secondary icon round" id="trash-button" type="button" aria-label="Delete messages">
       🗑️
     </button>
-    <button class="button secondary icon" id="pause-button" type="button" aria-label="Pause refresh">
+    <button class="button secondary icon round" id="pause-button" type="button" aria-label="Pause refresh">
       ⏸️
     </button>
   </div>
