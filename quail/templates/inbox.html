@@ -323,7 +323,7 @@
       return rawValue;
     }
     const now = new Date();
-    const diffMs = now.getTime() - parsed.getTime();
+    let diffMs = now.getTime() - parsed.getTime();
     const clockSkewMs = 60000;
     if (diffMs < -clockSkewMs) {
       return formatAbsoluteTimestamp(parsed);
