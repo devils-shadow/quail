@@ -4,8 +4,30 @@ All notable changes to this project will be documented in this file. This projec
 
 ## [Unreleased]
 
-- install.sh now initializes the admin PIN from `QUAIL_ADMIN_PIN` when unset.
-- upgrade.sh can reset the admin PIN when `QUAIL_RESET_PIN=true`.
+- Nothing yet.
+
+## [0.3.5] - 2026-01-14
+
+### Added
+
+- WebSocket inbox updates with automatic fallback to polling and periodic timestamp refresh.
+- WebSocket reconnect/backoff and drift detection for inbox updates.
+- Origin allowlist support for WebSocket connections (`QUAIL_ALLOWED_ORIGINS`).
+- Inbox event retention cleanup to keep event logs bounded.
+- Interactive install and upgrade prompts (CI-safe) for required settings and PIN rotation.
+- Optional install smoke test (`install.sh --smoke-test`).
+- Admin ingest health summary on the settings page.
+
+### Changed
+
+- WebSocket inbox updates are enabled by default with `QUAIL_ENABLE_WS=true`.
+- Upgrade flow can rotate the admin PIN via interactive prompt or `QUAIL_RESET_PIN=true`.
+
+### Fixed
+
+- Purge retention job uses a shared connection to avoid SQLite locking while logging events.
+- WebSocket event loop row handling.
+- Admin PIN validation and enforcement on first install.
 
 ## [0.3.0] - 2026-01-13
 
