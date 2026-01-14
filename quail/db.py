@@ -101,6 +101,15 @@ SCHEMA = [
         FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ingest_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL,
+        envelope_rcpt TEXT,
+        status TEXT NOT NULL,
+        error_summary TEXT
+    )
+    """,
 ]
 
 
@@ -250,6 +259,37 @@ def log_ingest_decision(
             ),
         )
         conn.commit()
+
+
+def log_ingest_attempt(
+    db_path: Path,
+    occurred_at: str,
+    status: str,
+    envelope_rcpt: str | None = None,
+    error_summary: str | None = None,
+) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO ingest_attempts (occurred_at, envelope_rcpt, status, error_summary)
+            VALUES (?, ?, ?, ?)
+            """,
+            (occurred_at, envelope_rcpt, status, error_summary),
+        )
+        conn.commit()
+
+
+def list_ingest_attempts(db_path: Path, limit: int = 20) -> Iterable[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        yield from conn.execute(
+            """
+            SELECT occurred_at, envelope_rcpt, status, error_summary
+            FROM ingest_attempts
+            ORDER BY occurred_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
 
 
 def get_rate_limit_state(db_path: Path, source_ip: str) -> sqlite3.Row | None:

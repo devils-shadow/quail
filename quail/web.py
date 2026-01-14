@@ -1143,6 +1143,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
     _log_admin_action(settings.db_path, "admin_settings_view", request, entity="settings")
     storage_stats = _get_storage_stats(settings.db_path)
     ingest_metrics = _get_ingest_metrics(settings.db_path)
+    ingest_attempts = [dict(row) for row in db.list_ingest_attempts(settings.db_path)]
     rules_domain = _normalize_domain(request.query_params.get("rules_domain"))
     rules = db.list_address_rules(settings.db_path, rules_domain) if rules_domain else []
     context = {
@@ -1166,6 +1167,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "ingest_last_24h": ingest_metrics["ingest_last_24h"],
         "recent_ingest_rate": ingest_metrics["recent_ingest_rate"],
         "top_sender_domains": ingest_metrics["top_sender_domains"],
+        "ingest_attempts": ingest_attempts,
         "domain_policies": [dict(row) for row in db.list_domain_policies(settings.db_path)],
         "domain_modes": DOMAIN_MODES,
         "domain_actions": DECISION_STATUSES,
