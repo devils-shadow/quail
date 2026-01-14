@@ -45,7 +45,15 @@ To override, set `QUAIL_ALLOWED_ORIGINS` (comma-separated origins).
 Quail runs plain HTTP on port 8000. If you terminate TLS with nginx, you must
 enable WebSocket upgrades or the inbox will not receive live updates.
 
-Add the following to the `location /` block that proxies to Quail:
+Follow these steps:
+
+1. **Locate your nginx site file.** On Ubuntu, this is usually
+   `/etc/nginx/sites-available/<site>` with a symlink in
+   `/etc/nginx/sites-enabled/`. If you are unsure, run:
+   `sudo nginx -T | rg "server_name"` and find the block for your hostname.
+2. **Edit the site file** and find the `location /` block that proxies to Quail
+   (the one with `proxy_pass http://127.0.0.1:8000;`).
+3. **Add the WebSocket headers** inside that `location /` block:
 
 ```
 proxy_http_version 1.1;
@@ -56,7 +64,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
-After editing, validate and reload:
+4. **Validate and reload nginx:**
 
 ```
 sudo nginx -t
