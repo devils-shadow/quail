@@ -20,11 +20,7 @@ from pathlib import Path
 
 from quail import db
 from quail.logging_config import configure_logging
-from quail.settings import (
-    get_quarantine_retention_days,
-    get_retention_days,
-    get_settings,
-)
+from quail.settings import get_quarantine_retention_days, get_retention_days, get_settings
 
 LOGGER = logging.getLogger(__name__)
 BATCH_SIZE = 200
