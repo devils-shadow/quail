@@ -324,8 +324,12 @@
     }
     const now = new Date();
     const diffMs = now.getTime() - parsed.getTime();
-    if (diffMs < 0) {
+    const clockSkewMs = 60000;
+    if (diffMs < -clockSkewMs) {
       return formatAbsoluteTimestamp(parsed);
+    }
+    if (diffMs < 0) {
+      diffMs = 0;
     }
     const seconds = Math.floor(diffMs / 1000);
     if (seconds < 45) {
