@@ -6,14 +6,14 @@ exposes a private shared inbox UI. See
 [QUAIL_CODEX_CONTEXT.md](QUAIL_CODEX_CONTEXT.md) for the authoritative
 requirements, including the domain policy/rule/quarantine model.
 
-If you want the step-by-step operator playbook, head to
-[docs/RUNBOOK.md](docs/RUNBOOK.md). 🐦
+If you want the step-by-step operator playbook, head to the
+[runbook](docs/RUNBOOK.md). 🐦
 
 ## ✅ Status
 
 Core ingest, UI, and admin workflows are implemented and actively maintained.
-Quail is production-oriented for internal QA use; see
-[CHANGELOG.md](CHANGELOG.md) for release updates.
+Quail is production-oriented for internal QA use; see the
+[changelog](CHANGELOG.md) for release updates.
 
 ## 📥 Ingest
 
@@ -49,7 +49,7 @@ Use this checklist before running `install.sh`:
 5) Run the installer: `sudo ./install.sh` (optional: `--smoke-test`).
 6) Verify services: `systemctl status quail quail-purge.timer`.
 7) If nginx terminates TLS, add `proxy_pass http://127.0.0.1:8000;` plus
-   WebSocket upgrade headers (see [docs/RUNBOOK.md](docs/RUNBOOK.md)) and reload
+   WebSocket upgrade headers (see the [runbook](docs/RUNBOOK.md)) and reload
    nginx.
 
 ### 🔁 Upgrades
@@ -82,13 +82,13 @@ To upgrade an existing install:
 
 ## 🧪 Testing
 
-- See [docs/TESTING.md](docs/TESTING.md) for pytest markers, standard commands,
-  and CI coverage.
+- See the [testing guide](docs/TESTING.md) for pytest markers, standard
+  commands, and CI coverage.
 
 ## 🧭 Deprecations
 
-- Framework deprecation notes and a minimal migration plan live in
-  [docs/DEPRECATIONS.md](docs/DEPRECATIONS.md).
+- Framework deprecation notes and a minimal migration plan live in the
+  [deprecations guide](docs/DEPRECATIONS.md).
 
 ## 📁 Install location
 
