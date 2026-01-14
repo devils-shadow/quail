@@ -40,6 +40,29 @@ uses the existing polling behavior.
 For WebSocket origin checks, Quail allows the current host origin by default.
 To override, set `QUAIL_ALLOWED_ORIGINS` (comma-separated origins).
 
+### Nginx HTTPS + WebSocket support
+
+Quail runs plain HTTP on port 8000. If you terminate TLS with nginx, you must
+enable WebSocket upgrades or the inbox will not receive live updates.
+
+Add the following to the `location /` block that proxies to Quail:
+
+```
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+After editing, validate and reload:
+
+```
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
 ## Upgrade
 
 To upgrade Quail to a newer version:

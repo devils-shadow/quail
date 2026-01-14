@@ -19,6 +19,7 @@ with OAuth2 or other access controls).
 - Bind host: `127.0.0.1`
 - Access: proxy only
 - Reverse proxy: required
+- WebSockets: proxy must allow Upgrade/Connection headers
 
 ## Switching Modes
 

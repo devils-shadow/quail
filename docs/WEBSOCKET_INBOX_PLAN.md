@@ -26,6 +26,7 @@ included here.
   `/etc/quail/config.env` to opt out and use polling only.
 - WebSocket origin checks allow the current host origin by default; override
   with `QUAIL_ALLOWED_ORIGINS` if needed.
+- Inbox event rows are short-lived and purged by the retention job (1 day).
 
 ## Proposed Architecture
 
