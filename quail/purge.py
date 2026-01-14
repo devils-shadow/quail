@@ -20,7 +20,11 @@ from pathlib import Path
 
 from quail import db
 from quail.logging_config import configure_logging
-from quail.settings import get_quarantine_retention_days, get_retention_days, get_settings
+from quail.settings import (
+    get_quarantine_retention_days,
+    get_retention_days,
+    get_settings,
+)
 
 LOGGER = logging.getLogger(__name__)
 BATCH_SIZE = 200
@@ -119,7 +123,9 @@ def _purge_quarantine_messages(
     batch_size: int,
 ) -> tuple[int, int]:
     retention_values = [default_retention_days, *overrides.values()]
-    min_retention_days = min(retention_values) if retention_values else default_retention_days
+    min_retention_days = (
+        min(retention_values) if retention_values else default_retention_days
+    )
     cutoff_min = now - timedelta(days=min_retention_days)
     purged_messages = 0
     purged_attachments = 0
