@@ -1,6 +1,6 @@
 # Architecture
 
-This document summarizes the architecture described in `QUAIL_CODEX_CONTEXT.md` and serves as a high‑level overview for developers and reviewers.
+This document summarizes the architecture described in `QUAIL_CODEX_CONTEXT.md` and serves as a high‑level overview for developers and reviewers. The authoritative ingest decision model, including domain policy/rule/quarantine behavior, lives in `QUAIL_CODEX_CONTEXT.md`.
 
 ## Public Plane
 
