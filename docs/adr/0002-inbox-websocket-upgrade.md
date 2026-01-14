@@ -19,7 +19,8 @@ Adopt a WebSocket-based inbox update channel with a polling fallback:
 - Start with a single-process in-memory broadcaster; add a broker only if
   multi-worker deployments are required.
 
-Implementation details and remaining hardening notes live in `docs/WEBSOCKET_INBOX_PLAN.md`.
+Implementation details and historical hardening notes live in
+`docs/archive/WEBSOCKET_INBOX_PLAN.md`.
 
 ## Consequences
 

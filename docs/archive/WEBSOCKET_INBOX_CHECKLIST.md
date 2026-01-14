@@ -54,7 +54,7 @@ Acceptance criteria:
 **Objective:** Add WebSocket inbox updates with a safe fallback and opt-out flag.
 
 Checklist:
-- Implement `/ws/inbox` per `docs/WEBSOCKET_INBOX_PLAN.md`.
+- Implement `/ws/inbox` per `docs/archive/WEBSOCKET_INBOX_PLAN.md`.
 - Implement an in-memory connection manager keyed by inbox filter.
 - Emit snapshot on connect; emit delta updates on ingest/admin/purge changes.
 - Keep ETag polling as a fallback if WebSocket fails.
