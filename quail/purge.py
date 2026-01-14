@@ -25,6 +25,7 @@ from quail.settings import get_quarantine_retention_days, get_retention_days, ge
 LOGGER = logging.getLogger(__name__)
 BATCH_SIZE = 200
 AUDIT_RETENTION_DAYS = 30
+INBOX_EVENT_RETENTION_DAYS = 1
 
 
 def _now_iso() -> str:
@@ -208,6 +209,15 @@ def _purge_admin_actions(conn: sqlite3.Connection, cutoff: datetime) -> int:
     return cursor.rowcount
 
 
+def _purge_inbox_events(conn: sqlite3.Connection, cutoff: datetime) -> int:
+    cursor = conn.execute(
+        "DELETE FROM inbox_events WHERE occurred_at < ?",
+        (cutoff.isoformat(),),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
 def main() -> int:
     """Entry point for the purge job.
 
@@ -238,6 +248,7 @@ def main() -> int:
         purged_audit_actions = _purge_admin_actions(
             conn, now - timedelta(days=AUDIT_RETENTION_DAYS)
         )
+        _purge_inbox_events(conn, now - timedelta(days=INBOX_EVENT_RETENTION_DAYS))
 
     LOGGER.info(
         "Retention purge complete (retention=%s days, quarantine_retention=%s days, "

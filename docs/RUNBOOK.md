@@ -37,6 +37,9 @@ WebSocket inbox updates are enabled by default. To opt out, set
 `QUAIL_ENABLE_WS=false` in `/etc/quail/config.env`. When disabled, the inbox
 uses the existing polling behavior.
 
+For WebSocket origin checks, Quail allows the current host origin by default.
+To override, set `QUAIL_ALLOWED_ORIGINS` (comma-separated origins).
+
 ## Upgrade
 
 To upgrade Quail to a newer version:

@@ -59,12 +59,14 @@ Checklist:
 - Emit snapshot on connect; emit delta updates on ingest/admin/purge changes.
 - Keep ETag polling as a fallback if WebSocket fails.
 - Add a feature flag so polling-only remains available (`QUAIL_ENABLE_WS=false`).
+- Add an origin allowlist check for WebSocket connections.
 
 Acceptance criteria:
 - WebSocket connects and delivers a snapshot payload by default.
 - Inbox updates without full-page reloads when new messages arrive.
 - When WebSocket fails, polling resumes automatically.
 - Admin/non-admin access rules match `/api/inbox` behavior.
+- WebSocket rejects connections from non-allowed origins.
 
 ## Phase 4: WebSocket Hardening
 

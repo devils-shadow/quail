@@ -70,6 +70,7 @@ BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "true").strip().lower() in {"1", "true", "yes", "on"}
+RAW_ALLOWED_ORIGINS = os.getenv("QUAIL_ALLOWED_ORIGINS", "")
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -130,6 +131,25 @@ def _normalize_inbox_filter(raw_value: str | None) -> str | None:
         return None
     cleaned = raw_value.strip()
     return cleaned or None
+
+
+def _build_allowed_origins(request: Request | WebSocket) -> set[str]:
+    host = request.headers.get("host", "")
+    allowed = {f"https://{host}", f"http://{host}"} if host else set()
+    if RAW_ALLOWED_ORIGINS:
+        for entry in RAW_ALLOWED_ORIGINS.split(","):
+            value = entry.strip()
+            if value:
+                allowed.add(value)
+    return allowed
+
+
+def _origin_allowed(request: Request | WebSocket) -> bool:
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    allowed = _build_allowed_origins(request)
+    return origin in allowed
 
 
 def _init_settings(settings_path: Path) -> None:
@@ -1164,6 +1184,9 @@ async def inbox_ws(ws: WebSocket, inbox: str | None = None) -> None:
         await ws.accept()
         await ws.send_json({"type": "error", "detail": "WebSocket inbox disabled."})
         await ws.close()
+        return
+    if not _origin_allowed(ws):
+        await ws.close(code=1008)
         return
     inbox_filter = _normalize_inbox_filter(inbox) or ""
     is_admin = _is_admin_token(ws.cookies.get(ADMIN_SESSION_COOKIE))

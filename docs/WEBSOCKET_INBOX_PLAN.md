@@ -24,6 +24,8 @@ included here.
 - Admin actions and purge logic update the same message store.
 - WebSocket updates are enabled by default. Set `QUAIL_ENABLE_WS=false` in
   `/etc/quail/config.env` to opt out and use polling only.
+- WebSocket origin checks allow the current host origin by default; override
+  with `QUAIL_ALLOWED_ORIGINS` if needed.
 
 ## Proposed Architecture
 
