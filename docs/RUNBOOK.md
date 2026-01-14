@@ -43,7 +43,9 @@ To override, set `QUAIL_ALLOWED_ORIGINS` (comma-separated origins).
 ### Nginx HTTPS + WebSocket support
 
 Quail runs plain HTTP on port 8000. If you terminate TLS with nginx, you must
-enable WebSocket upgrades or the inbox will not receive live updates.
+enable WebSocket upgrades or the inbox will not receive live updates. If you
+are accessing Quail directly (no nginx, local testing), you can skip this
+section entirely.
 
 Follow these steps:
 
