@@ -13,10 +13,10 @@ from disk.
 
 from __future__ import annotations
 
+import sqlite3
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sqlite3
 
 from quail import db
 from quail.logging_config import configure_logging

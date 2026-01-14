@@ -579,7 +579,13 @@ async def _broadcast_inbox_event(db_path: Path, event: dict[str, object]) -> Non
             if not _matches_inbox_filter(envelope_rcpt, inbox_filter):
                 continue
             _, etag = _build_inbox_snapshot(db_path, is_admin, inbox_filter or None)
-            payload = {"type": "delta", "added": [], "updated": [], "deleted": [message_id], "etag": etag}
+            payload = {
+                "type": "delta",
+                "added": [],
+                "updated": [],
+                "deleted": [message_id],
+                "etag": etag,
+            }
             await INBOX_HUB.broadcast(inbox_filter, is_admin, payload)
             continue
         if message_payload is None:
