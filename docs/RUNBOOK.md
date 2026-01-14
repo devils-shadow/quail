@@ -51,8 +51,9 @@ Follow these steps:
    `/etc/nginx/sites-available/<site>` with a symlink in
    `/etc/nginx/sites-enabled/`. If you are unsure, run:
    `sudo nginx -T | rg "server_name"` and find the block for your hostname.
-2. **Edit the site file** and find the `location /` block that proxies to Quail
-   (the one with `proxy_pass http://127.0.0.1:8000;`).
+2. **Edit the site file** and find or create the `location /` block that proxies
+   to Quail. It must include `proxy_pass http://127.0.0.1:8000;` so nginx
+   forwards requests to the Quail service.
 3. **Add the WebSocket headers** inside that `location /` block:
 
 ```
