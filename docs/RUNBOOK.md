@@ -1,6 +1,6 @@
 # Runbook
 
-This runbook provides step‑by‑step instructions for installing, configuring, running and maintaining Quail. It is aimed at a non‑developer operator.
+This runbook provides step‑by‑step instructions for installing, configuring, running and maintaining Quail. It is aimed at a non‑developer operator. Forward-looking work for public internet deployment is documented separately in `docs/QUAIL_2_0_SPEC.md`.
 
 ## Installation
 
