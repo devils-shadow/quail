@@ -379,6 +379,22 @@
         width: 42px;
         height: 42px;
         padding: 0;
+        line-height: 1;
+      }
+
+      .button.square .button-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        line-height: 1;
+      }
+
+      @supports (-webkit-appearance: none) and (not (-moz-appearance: none)) {
+        .button.square .button-label {
+          transform: translateY(1px);
+        }
       }
 
       .button.round {
@@ -455,8 +471,22 @@
       }
 
       .inbox-table .message-select {
-        margin-right: 8px;
-        margin-left: -4px;
+        margin-right: 10px;
+        margin-left: 0;
+        vertical-align: middle;
+        position: relative;
+        top: 1px;
+      }
+
+      .inbox-table .from-text {
+        position: relative;
+        top: 2px;
+      }
+
+      @supports (-moz-appearance: none) {
+        .inbox-table .from-text {
+          top: 3px;
+        }
       }
 
       .table th:last-child,

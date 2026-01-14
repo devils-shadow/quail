@@ -16,7 +16,9 @@
         value="{{ current_inbox | default('') }}"
         placeholder="Filter inbox (e.g. test or hamara*)"
       />
-      <button class="button square round" type="submit">GO</button>
+      <button class="button square round" type="submit">
+        <span class="button-label">GO</span>
+      </button>
     </form>
     <button class="button secondary icon round" id="trash-button" type="button" aria-label="Delete messages">
       🗑️
@@ -57,7 +59,7 @@
       <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
         <td class="from-col">
           <input class="message-select" type="checkbox" aria-label="Select message" />
-          {{ from_display }}
+          <span class="from-text">{{ from_display }}</span>
           {% if is_admin and message.quarantined %}
           <span class="badge">Quarantined</span>
           {% endif %}
@@ -198,9 +200,9 @@
     checkbox.type = "checkbox";
     checkbox.setAttribute("aria-label", "Select message");
     fromCell.appendChild(checkbox);
-    const fromText = document.createTextNode(
-      ` ${formatFrom(message.from_addr)}`
-    );
+    const fromText = document.createElement("span");
+    fromText.className = "from-text";
+    fromText.textContent = ` ${formatFrom(message.from_addr)}`;
     fromCell.appendChild(fromText);
     if (isAdmin && message.quarantined) {
       const badge = document.createElement("span");
