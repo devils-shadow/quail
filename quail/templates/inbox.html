@@ -360,6 +360,10 @@
     });
   };
 
+  const startReceivedTicker = () => {
+    window.setInterval(applyReceivedFormatting, 60000);
+  };
+
   const hasSameMessages = (messages) => {
     if (rows.length !== messages.length) {
       return false;
@@ -591,5 +595,6 @@
 
   applyHidden();
   applyReceivedFormatting();
+  startReceivedTicker();
 </script>
 {% endblock %}
