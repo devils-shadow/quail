@@ -48,6 +48,23 @@ Use this checklist before running `install.sh`:
    - Public internet: `127.0.0.1` behind a reverse proxy (for example, nginx
      with OAuth2)
 
+## New Deployment Checklist
+
+Use this end-to-end checklist for a fresh install:
+
+1) Clone this repository to `/opt/quail`.
+2) Copy `config/config.example.env` to `/etc/quail/config.env`.
+3) Set required values in `/etc/quail/config.env`:
+   - `QUAIL_DOMAINS`
+   - `QUAIL_ADMIN_PIN`
+4) Choose a bind host in `/etc/quail/config.env`:
+   - VPN VM mode: `QUAIL_BIND_HOST=0.0.0.0`
+   - Reverse-proxy mode: `QUAIL_BIND_HOST=127.0.0.1`
+5) Run the installer: `sudo ./install.sh` (optional: `--smoke-test`).
+6) Verify services: `systemctl status quail quail-purge.timer`.
+7) If you terminate TLS with nginx, add WebSocket upgrade headers (see
+   `docs/RUNBOOK.md`) and reload nginx.
+
 ## Admin access
 
 - Admin actions are gated by a shared PIN stored as a hash in SQLite

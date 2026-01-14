@@ -1,6 +1,6 @@
 # ADR 0002: Inbox WebSocket Upgrade
 
-*Status:* proposed
+*Status:* accepted
 
 ## Context
 
@@ -19,7 +19,7 @@ Adopt a WebSocket-based inbox update channel with a polling fallback:
 - Start with a single-process in-memory broadcaster; add a broker only if
   multi-worker deployments are required.
 
-Detailed design guidance lives in `docs/WEBSOCKET_INBOX_PLAN.md`.
+Implementation details and remaining hardening notes live in `docs/WEBSOCKET_INBOX_PLAN.md`.
 
 ## Consequences
 

@@ -1,8 +1,7 @@
 # WebSocket Inbox Upgrade Plan
 
-This document outlines a WebSocket-based refresh system for the inbox UI. It
-is a design guide intended for future implementation. No code changes are
-included here.
+This document outlines the WebSocket-based refresh system for the inbox UI. It
+describes the current implementation and notes remaining hardening work.
 
 ## Goals
 
@@ -17,7 +16,7 @@ included here.
 - External dependencies (unless multi-worker support is required).
 - Rewriting the ingest pipeline or database schema.
 
-## Current Baseline
+## Current Baseline (Implemented)
 
 - `GET /api/inbox` returns the inbox list with ETag support.
 - The inbox page polls with ETag-aware fetches and re-renders on changes.
@@ -28,7 +27,7 @@ included here.
   with `QUAIL_ALLOWED_ORIGINS` if needed.
 - Inbox event rows are short-lived and purged by the retention job (1 day).
 
-## Proposed Architecture
+## Architecture
 
 ### Server
 
@@ -48,7 +47,7 @@ included here.
 
 ## Single-Process vs Multi-Worker
 
-### Single-Process (initial target)
+### Single-Process (current)
 - One server process holds all WebSocket connections.
 - Broadcast is in-memory and straightforward.
 - Lowest complexity and best fit for Quail’s low-volume usage.
@@ -132,6 +131,11 @@ included here.
 - If WebSocket drops: start polling every 15–30 seconds.
 - If WebSocket reconnects: stop polling again.
 - Keep the inbox table stable; avoid full page reloads.
+
+## Remaining Hardening
+
+- Add reconnect backoff and visibility-aware reconnects.
+- Add drift detection and forced snapshots on mismatch.
 
 ## Connection Lifecycle
 
