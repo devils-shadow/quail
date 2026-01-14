@@ -5,15 +5,16 @@ This runbook provides step‑by‑step instructions for installing, configuring,
 ## Installation
 
 1. **Clone the repository** on the target host (a dedicated VM or server running Ubuntu Server).
-2. **Create configuration:** Copy `config/config.example.env` to `/etc/quail/config.env` and adjust the values. Replace the example `QUAIL_DOMAINS` with the comma-separated list of domains you want Postfix to accept and set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN. `install.sh` will fail fast if you leave the example domain in place.
-3. **Run the installer:** Execute `sudo ./install.sh`. The script will:
+2. **Run the installer:** Execute `sudo ./install.sh` and follow the prompts. The installer writes `/etc/quail/config.env` and will request required values such as `QUAIL_DOMAINS` and the admin PIN. For automation or CI, pass `--non-interactive` to suppress prompts.
+3. **Review configuration (optional):** Inspect `/etc/quail/config.env` if you want to fine-tune bind host, storage paths, or message size limits after the guided setup.
+4. **Installer details:** The script will:
    - Install necessary OS packages.
    - Create a system user and the `/var/lib/quail/{eml,att}` directories.
    - Create a Python virtual environment and install dependencies.
    - Install Postfix relay/transport configuration for the Quail domain.
    - Install and enable systemd units for the service and purge timer.
    - Optional: add `--smoke-test` to perform a basic end-to-end ingest check.
-4. **Verify installation:** Ensure that the `quail.service` and `quail-purge.timer` units are active using `systemctl status`.
+5. **Verify installation:** Ensure that the `quail.service` and `quail-purge.timer` units are active using `systemctl status`.
 
 ### Systemd overrides
 
@@ -79,7 +80,7 @@ sudo systemctl reload nginx
 To upgrade Quail to a newer version:
 
 1. Pull the latest changes into the repository.
-2. Run `sudo ./upgrade.sh`. It will update dependencies, restart services and leave stored mail intact.
+2. Run `sudo ./upgrade.sh`. It will update dependencies, restart services and leave stored mail intact. If you want to rotate the admin PIN, opt in when prompted during the upgrade.
    To reset the admin PIN during upgrade, set `QUAIL_RESET_PIN=true` and
    `QUAIL_ADMIN_PIN` in `/etc/quail/config.env` before running the script.
 3. Check the service and timer status as in the installation step.

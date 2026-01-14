@@ -38,25 +38,24 @@ Quail is production-oriented for internal QA use; see the
 
 Use this checklist before running `install.sh`:
 
-1) Copy `config/config.example.env` to `/etc/quail/config.env`.
-2) Set `QUAIL_DOMAINS` to the comma-separated domains Postfix should accept.
-3) Set `QUAIL_ADMIN_PIN` to a 4-9 digit numeric PIN (first install required).
-4) Pick your bind host in `/etc/quail/config.env`:
-   - Local-only dev: `127.0.0.1`
-   - VPN/internal DNS (direct access): `0.0.0.0`
-   - Public internet: `127.0.0.1` behind a reverse proxy (nginx + TLS)
-5) Run the installer: `sudo ./install.sh` (optional: `--smoke-test`).
-6) Verify services: `systemctl status quail quail-purge.timer`.
-7) If nginx terminates TLS, add `proxy_pass http://127.0.0.1:8000;` plus
+1) Run the installer: `sudo ./install.sh` (optional: `--smoke-test`).
+2) Follow the prompts to set required values (`QUAIL_DOMAINS`, `QUAIL_ADMIN_PIN`)
+   and confirm bind host/storage settings.
+3) Verify services: `systemctl status quail quail-purge.timer`.
+4) If nginx terminates TLS, add `proxy_pass http://127.0.0.1:8000;` plus
    WebSocket upgrade headers (see the [runbook](docs/RUNBOOK.md)) and reload
    nginx.
+
+Advanced: `install.sh` writes `/etc/quail/config.env`. You can edit this file
+directly if you prefer manual configuration.
 
 ### 🔁 Upgrades
 
 To upgrade an existing install:
 
 1) Pull the latest changes into `/opt/quail`.
-2) Run `sudo ./upgrade.sh` to update dependencies and restart services.
+2) Run `sudo ./upgrade.sh` to update dependencies and restart services. You can
+   opt in to changing the admin PIN during the upgrade when prompted.
 3) Verify services: `systemctl status quail quail-purge.timer`.
 
 ## 🔐 Admin access
