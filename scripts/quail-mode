@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_PATH="/etc/quail/config.env"
+SERVICE_NAME="quail"
+
+usage() {
+  cat <<'USAGE'
+Usage: sudo /opt/quail/scripts/quail-mode <vpn|proxy>
+
+Modes:
+  vpn    Set QUAIL_BIND_HOST=0.0.0.0 and restart Quail
+  proxy  Set QUAIL_BIND_HOST=127.0.0.1 and restart Quail
+USAGE
+}
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "ERROR: must be run as root." >&2
+  usage
+  exit 1
+fi
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 1
+fi
+
+case "$1" in
+  vpn)
+    bind_host="0.0.0.0"
+    ;;
+  proxy)
+    bind_host="127.0.0.1"
+    ;;
+  *)
+    echo "ERROR: invalid mode '$1'." >&2
+    usage
+    exit 1
+    ;;
+ esac
+
+if [[ ! -f "${CONFIG_PATH}" ]]; then
+  echo "ERROR: ${CONFIG_PATH} not found." >&2
+  exit 1
+fi
+
+if grep -q '^QUAIL_BIND_HOST=' "${CONFIG_PATH}"; then
+  sed -i "s/^QUAIL_BIND_HOST=.*/QUAIL_BIND_HOST=${bind_host}/" "${CONFIG_PATH}"
+else
+  printf '\nQUAIL_BIND_HOST=%s\n' "${bind_host}" >> "${CONFIG_PATH}"
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl restart "${SERVICE_NAME}.service"
+else
+  echo "WARNING: systemctl not found; restart ${SERVICE_NAME}.service manually." >&2
+fi
+
+echo "Updated QUAIL_BIND_HOST=${bind_host} in ${CONFIG_PATH}."

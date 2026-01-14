@@ -25,6 +25,11 @@ This runbook provides step‑by‑step instructions for installing, configuring,
   `/etc/systemd/system/quail.service.d/override.conf` if needed and reload
   systemd afterwards.
 
+### Deployment modes
+
+See `docs/MODES.md` for VPN VM mode vs reverse-proxy mode guidance and the
+`scripts/quail-mode` helper for switching bind hosts safely.
+
 ## Upgrade
 
 To upgrade Quail to a newer version:
