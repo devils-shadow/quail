@@ -4,11 +4,19 @@ set -euo pipefail
 INSTALL_DIR="/opt/quail"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SMOKE_TEST=0
+FORCE_INTERACTIVE=0
+FORCE_NON_INTERACTIVE=0
 
 for arg in "$@"; do
   case "${arg}" in
     --smoke-test)
       SMOKE_TEST=1
+      ;;
+    --interactive)
+      FORCE_INTERACTIVE=1
+      ;;
+    --non-interactive)
+      FORCE_NON_INTERACTIVE=1
       ;;
     *)
       echo "ERROR: unknown option ${arg}" >&2
@@ -16,6 +24,32 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+INTERACTIVE=0
+if [[ ${FORCE_NON_INTERACTIVE} -eq 1 ]]; then
+  INTERACTIVE=0
+elif [[ ${FORCE_INTERACTIVE} -eq 1 ]]; then
+  INTERACTIVE=1
+elif [[ -t 0 && -z "${CI:-}" ]]; then
+  INTERACTIVE=1
+fi
+
+escape_sed() {
+  printf '%s' "$1" | sed -e 's/[\/&|]/\\&/g'
+}
+
+set_env_var() {
+  local key="$1"
+  local value="$2"
+  local file="/etc/quail/config.env"
+  local escaped
+  escaped="$(escape_sed "${value}")"
+  if grep -q "^${key}=" "${file}"; then
+    sed -i "s|^${key}=.*|${key}=${escaped}|" "${file}"
+  else
+    printf '\n%s=%s\n' "${key}" "${value}" >> "${file}"
+  fi
+}
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "ERROR: install.sh must be run as root." >&2
@@ -42,11 +76,6 @@ else
   exit 1
 fi
 
-if ! id -u quail >/dev/null 2>&1; then
-  useradd --system --home /var/lib/quail --shell /usr/sbin/nologin quail
-fi
-
-install -d -o quail -g quail -m 0750 /var/lib/quail /var/lib/quail/eml /var/lib/quail/att
 install -d -m 0755 /etc/quail
 if [[ ! -f /etc/quail/config.env ]]; then
   install -m 0644 "${INSTALL_DIR}/config/config.example.env" /etc/quail/config.env
@@ -59,13 +88,135 @@ if [[ -f /etc/quail/config.env ]]; then
   set +a
 fi
 
+if ! id -u quail >/dev/null 2>&1; then
+  useradd --system --home /var/lib/quail --shell /usr/sbin/nologin quail
+fi
+
+if [[ ${INTERACTIVE} -eq 1 ]]; then
+  default_data_dir="/var/lib/quail"
+  default_eml_dir="${default_data_dir}/eml"
+  default_att_dir="${default_data_dir}/att"
+  default_db_path="${default_data_dir}/quail.db"
+
+  data_dir="${QUAIL_DATA_DIR:-${default_data_dir}}"
+  eml_dir="${QUAIL_EML_DIR:-${default_eml_dir}}"
+  att_dir="${QUAIL_ATTACHMENT_DIR:-${default_att_dir}}"
+  db_path="${QUAIL_DB_PATH:-${default_db_path}}"
+
+  if [[ "${data_dir}" == "${default_data_dir}" && "${eml_dir}" == "${default_eml_dir}" && "${att_dir}" == "${default_att_dir}" && "${db_path}" == "${default_db_path}" ]]; then
+    read -r -p "Use default storage paths under ${default_data_dir}? [Y/n] " use_defaults
+    if [[ "${use_defaults}" =~ ^[Nn]$ ]]; then
+      read -r -p "QUAIL_DATA_DIR [${default_data_dir}]: " input
+      data_dir="${input:-${default_data_dir}}"
+      read -r -p "QUAIL_EML_DIR [${data_dir}/eml]: " input
+      eml_dir="${input:-${data_dir}/eml}"
+      read -r -p "QUAIL_ATTACHMENT_DIR [${data_dir}/att]: " input
+      att_dir="${input:-${data_dir}/att}"
+      read -r -p "QUAIL_DB_PATH [${data_dir}/quail.db]: " input
+      db_path="${input:-${data_dir}/quail.db}"
+
+      set_env_var "QUAIL_DATA_DIR" "${data_dir}"
+      set_env_var "QUAIL_EML_DIR" "${eml_dir}"
+      set_env_var "QUAIL_ATTACHMENT_DIR" "${att_dir}"
+      set_env_var "QUAIL_DB_PATH" "${db_path}"
+      QUAIL_DATA_DIR="${data_dir}"
+      QUAIL_EML_DIR="${eml_dir}"
+      QUAIL_ATTACHMENT_DIR="${att_dir}"
+      QUAIL_DB_PATH="${db_path}"
+    fi
+  fi
+
+  if [[ -z "${QUAIL_DOMAINS:-}" || "${QUAIL_DOMAINS}" == "mail.example.test" ]]; then
+    while true; do
+      read -r -p "QUAIL_DOMAINS (comma-separated) []: " input
+      if [[ -z "${input}" || "${input}" == "mail.example.test" ]]; then
+        echo "Please enter at least one real domain." >&2
+        continue
+      fi
+      QUAIL_DOMAINS="${input}"
+      set_env_var "QUAIL_DOMAINS" "${QUAIL_DOMAINS}"
+      break
+    done
+  fi
+
+  if [[ "${QUAIL_BIND_HOST:-127.0.0.1}" == "127.0.0.1" ]]; then
+    echo "Choose bind host:"
+    echo "  1) Local-only dev (127.0.0.1)"
+    echo "  2) VPN/internal direct access (0.0.0.0)"
+    echo "  3) Reverse proxy (keep 127.0.0.1)"
+    read -r -p "Selection [1]: " input
+    case "${input}" in
+      2)
+        QUAIL_BIND_HOST="0.0.0.0"
+        ;;
+      3)
+        QUAIL_BIND_HOST="127.0.0.1"
+        ;;
+      *)
+        QUAIL_BIND_HOST="127.0.0.1"
+        ;;
+    esac
+    set_env_var "QUAIL_BIND_HOST" "${QUAIL_BIND_HOST}"
+  fi
+
+  if [[ "${QUAIL_BIND_PORT:-8000}" == "8000" ]]; then
+    read -r -p "QUAIL_BIND_PORT [8000]: " input
+    if [[ -n "${input}" ]]; then
+      QUAIL_BIND_PORT="${input}"
+      set_env_var "QUAIL_BIND_PORT" "${QUAIL_BIND_PORT}"
+    fi
+  fi
+
+  if [[ "${QUAIL_MAX_MESSAGE_SIZE_MB:-10}" == "10" ]]; then
+    while true; do
+      read -r -p "QUAIL_MAX_MESSAGE_SIZE_MB [10]: " input
+      if [[ -z "${input}" ]]; then
+        break
+      fi
+      if [[ ! "${input}" =~ ^[0-9]+$ ]]; then
+        echo "Please enter a numeric value." >&2
+        continue
+      fi
+      QUAIL_MAX_MESSAGE_SIZE_MB="${input}"
+      set_env_var "QUAIL_MAX_MESSAGE_SIZE_MB" "${QUAIL_MAX_MESSAGE_SIZE_MB}"
+      break
+    done
+  fi
+
+  if [[ -z "${QUAIL_ALLOWED_ORIGINS:-}" ]]; then
+    suggested_origin=""
+    if [[ "${QUAIL_BIND_HOST:-127.0.0.1}" == "127.0.0.1" ]]; then
+      suggested_origin="http://127.0.0.1:${QUAIL_BIND_PORT:-8000}"
+    fi
+    if [[ -n "${suggested_origin}" ]]; then
+      read -r -p "QUAIL_ALLOWED_ORIGINS (comma-separated) [${suggested_origin} or blank]: " input
+      if [[ -n "${input}" ]]; then
+        QUAIL_ALLOWED_ORIGINS="${input}"
+        set_env_var "QUAIL_ALLOWED_ORIGINS" "${QUAIL_ALLOWED_ORIGINS}"
+      fi
+    else
+      read -r -p "QUAIL_ALLOWED_ORIGINS (comma-separated, blank to allow host origin) []: " input
+      if [[ -n "${input}" ]]; then
+        QUAIL_ALLOWED_ORIGINS="${input}"
+        set_env_var "QUAIL_ALLOWED_ORIGINS" "${QUAIL_ALLOWED_ORIGINS}"
+      fi
+    fi
+  fi
+fi
+
+data_dir="${QUAIL_DATA_DIR:-/var/lib/quail}"
+eml_dir="${QUAIL_EML_DIR:-${data_dir}/eml}"
+att_dir="${QUAIL_ATTACHMENT_DIR:-${data_dir}/att}"
+db_path="${QUAIL_DB_PATH:-${data_dir}/quail.db}"
+
+install -d -o quail -g quail -m 0750 "${data_dir}" "${eml_dir}" "${att_dir}"
+
 if [[ -f /etc/quail/config.env ]]; then
   if ! grep -q "^QUAIL_ENABLE_WS=" /etc/quail/config.env; then
     printf '\nQUAIL_ENABLE_WS=true\n' >> /etc/quail/config.env
   fi
 fi
 
-db_path="${QUAIL_DB_PATH:-/var/lib/quail/quail.db}"
 pin_already_set=0
 if [[ -f "${db_path}" ]]; then
   pin_already_set="$(python3 - <<'PY'
@@ -86,6 +237,23 @@ except sqlite3.Error:
     print("0")
 PY
 "${db_path}")"
+fi
+
+if [[ ${INTERACTIVE} -eq 1 && "${pin_already_set}" != "1" && -z "${QUAIL_ADMIN_PIN:-}" ]]; then
+  while true; do
+    read -r -p "Set QUAIL_ADMIN_PIN (4-9 digits): " input
+    if [[ -z "${input}" ]]; then
+      echo "PIN is required for first install." >&2
+      continue
+    fi
+    if [[ ! "${input}" =~ ^[0-9]+$ ]] || [[ ${#input} -lt 4 ]] || [[ ${#input} -gt 9 ]]; then
+      echo "PIN must be 4-9 digits." >&2
+      continue
+    fi
+    QUAIL_ADMIN_PIN="${input}"
+    set_env_var "QUAIL_ADMIN_PIN" "${QUAIL_ADMIN_PIN}"
+    break
+  done
 fi
 
 if [[ "${pin_already_set}" != "1" && -z "${QUAIL_ADMIN_PIN:-}" ]]; then

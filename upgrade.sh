@@ -3,6 +3,49 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/quail"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FORCE_INTERACTIVE=0
+FORCE_NON_INTERACTIVE=0
+
+for arg in "$@"; do
+  case "${arg}" in
+    --interactive)
+      FORCE_INTERACTIVE=1
+      ;;
+    --non-interactive)
+      FORCE_NON_INTERACTIVE=1
+      ;;
+    *)
+      echo "ERROR: unknown option ${arg}" >&2
+      exit 1
+      ;;
+  esac
+done
+
+INTERACTIVE=0
+if [[ ${FORCE_NON_INTERACTIVE} -eq 1 ]]; then
+  INTERACTIVE=0
+elif [[ ${FORCE_INTERACTIVE} -eq 1 ]]; then
+  INTERACTIVE=1
+elif [[ -t 0 && -z "${CI:-}" ]]; then
+  INTERACTIVE=1
+fi
+
+escape_sed() {
+  printf '%s' "$1" | sed -e 's/[\/&|]/\\&/g'
+}
+
+set_env_var() {
+  local key="$1"
+  local value="$2"
+  local file="/etc/quail/config.env"
+  local escaped
+  escaped="$(escape_sed "${value}")"
+  if grep -q "^${key}=" "${file}"; then
+    sed -i "s|^${key}=.*|${key}=${escaped}|" "${file}"
+  else
+    printf '\n%s=%s\n' "${key}" "${value}" >> "${file}"
+  fi
+}
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "ERROR: upgrade.sh must be run as root." >&2
@@ -27,6 +70,28 @@ if [[ -f /etc/quail/config.env ]]; then
   source /etc/quail/config.env
   set +a
 fi
+
+reset_pin_now=0
+if [[ ${INTERACTIVE} -eq 1 ]]; then
+  read -r -p "Change admin PIN? [y/N] " input
+  if [[ "${input}" =~ ^[Yy]$ ]]; then
+    while true; do
+      read -r -p "New QUAIL_ADMIN_PIN (4-9 digits): " pin_input
+      if [[ -z "${pin_input}" ]]; then
+        echo "PIN cannot be empty." >&2
+        continue
+      fi
+      if [[ ! "${pin_input}" =~ ^[0-9]+$ ]] || [[ ${#pin_input} -lt 4 ]] || [[ ${#pin_input} -gt 9 ]]; then
+        echo "PIN must be 4-9 digits." >&2
+        continue
+      fi
+      QUAIL_ADMIN_PIN="${pin_input}"
+      set_env_var "QUAIL_ADMIN_PIN" "${QUAIL_ADMIN_PIN}"
+      reset_pin_now=1
+      break
+    done
+  fi
+fi
 if [[ -f /etc/quail/config.env ]]; then
   if ! grep -q "^QUAIL_ENABLE_WS=" /etc/quail/config.env; then
     printf '\nQUAIL_ENABLE_WS=true\n' >> /etc/quail/config.env
@@ -37,7 +102,7 @@ if [[ -z "${QUAIL_DOMAINS:-}" ]]; then
   echo "Upgrades will continue, but new installs require this value to be configured." >&2
 fi
 
-if [[ "${QUAIL_RESET_PIN:-false}" == "true" ]]; then
+if [[ "${QUAIL_RESET_PIN:-false}" == "true" || ${reset_pin_now} -eq 1 ]]; then
   if [[ -z "${QUAIL_ADMIN_PIN:-}" ]]; then
     echo "NOTICE: QUAIL_RESET_PIN is true, but QUAIL_ADMIN_PIN is not set." >&2
     echo "Set QUAIL_ADMIN_PIN in /etc/quail/config.env to reset the admin PIN." >&2
