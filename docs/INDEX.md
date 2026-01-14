@@ -9,8 +9,14 @@
 - [Roadmap](ROADMAP.md): Planned features and near‑term objectives.
 - [Spam Mitigation Plan](archive/QUAIL_SPAM_MITIGATION_PLAN.md): Historical plan for spam-mitigation admin controls.
 - [WebSocket Inbox Plan](WEBSOCKET_INBOX_PLAN.md): Design workbook for inbox WebSocket updates.
+- [Quail 2.0 Spec](QUAIL_2_0_SPEC.md): Public internet deployment spec for auth, billing, and DMARC.
 - [Change Log](../CHANGELOG.md): A human‑readable history of changes.
 - [Todo List](../TODO.md): Outstanding tasks and areas requiring attention.
 - [Architecture Decision Records](adr/0000-template.md): Template and directory for recording architectural decisions.
   - [ADR 0001: HTML Rendering Model](adr/0001-html-rendering-model.md)
   - [ADR 0002: Inbox WebSocket Upgrade](adr/0002-inbox-websocket-upgrade.md)
+  - [ADR 0003: Authentication and RBAC](adr/0003-auth-and-rbac.md)
+  - [ADR 0004: Outbound Auth Email](adr/0004-outbound-auth-email.md)
+  - [ADR 0005: Stripe Billing Gate](adr/0005-stripe-billing-gate.md)
+  - [ADR 0006: Public Inbox Access Model](adr/0006-public-inbox-access-model.md)
+  - [ADR 0007: DMARC Enforcement](adr/0007-dmarc-enforcement.md)
