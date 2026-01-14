@@ -11,7 +11,8 @@ This runbook provides step‑by‑step instructions for installing, configuring,
    - Create a system user and the `/var/lib/quail/{eml,att}` directories.
    - Create a Python virtual environment and install dependencies.
    - Install Postfix relay/transport configuration for the Quail domain.
-   - Install and enable systemd units for the service and purge timer【104907567664902†L190-L199】.
+   - Install and enable systemd units for the service and purge timer.
+   - Optional: add `--smoke-test` to perform a basic end-to-end ingest check.
 4. **Verify installation:** Ensure that the `quail.service` and `quail-purge.timer` units are active using `systemctl status`.
 
 ### Systemd overrides

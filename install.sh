@@ -3,6 +3,19 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/quail"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SMOKE_TEST=0
+
+for arg in "$@"; do
+  case "${arg}" in
+    --smoke-test)
+      SMOKE_TEST=1
+      ;;
+    *)
+      echo "ERROR: unknown option ${arg}" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "ERROR: install.sh must be run as root." >&2
@@ -19,7 +32,11 @@ fi
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y
-  apt-get install -y python3-venv python3-pip postfix rsyslog
+  packages=(python3-venv python3-pip postfix rsyslog)
+  if [[ ${SMOKE_TEST} -eq 1 ]]; then
+    packages+=(swaks)
+  fi
+  apt-get install -y "${packages[@]}"
 else
   echo "ERROR: unsupported package manager. TODO: install python3-venv, python3-pip, postfix, rsyslog." >&2
   exit 1
@@ -224,5 +241,62 @@ install -m 0644 "${INSTALL_DIR}/systemd/quail-purge.timer" /etc/systemd/system/q
 systemctl daemon-reload
 systemctl enable --now quail.service
 systemctl enable --now quail-purge.timer
+
+if [[ ${SMOKE_TEST} -eq 1 ]]; then
+  echo "Running install smoke test..."
+  if ! systemctl is-active --quiet quail.service; then
+    echo "ERROR: quail.service is not active." >&2
+    exit 1
+  fi
+  if [[ ${#quail_domains[@]} -eq 0 ]]; then
+    echo "ERROR: QUAIL_DOMAINS is empty; cannot run smoke test." >&2
+    exit 1
+  fi
+  test_domain="${quail_domains[0]}"
+  test_localpart="smoke-$(date +%s)"
+  test_rcpt="${test_localpart}@${test_domain}"
+  transport_check="$(postmap -q "${test_domain}" /etc/postfix/transport || true)"
+  if [[ "${transport_check}" != "quail:" ]]; then
+    echo "ERROR: /etc/postfix/transport does not route ${test_domain} to quail:." >&2
+    exit 1
+  fi
+  if ! swaks --to "${test_rcpt}" --from "smoke@${test_domain}" --server 127.0.0.1 --timeout 10 >/dev/null 2>&1; then
+    echo "ERROR: swaks failed to send test email to ${test_rcpt}." >&2
+    exit 1
+  fi
+  db_path="${QUAIL_DB_PATH:-/var/lib/quail/quail.db}"
+  if ! python3 - <<'PY' "${db_path}" "${test_rcpt}"; then
+import sqlite3
+import sys
+import time
+
+db_path = sys.argv[1]
+rcpt = sys.argv[2]
+deadline = time.time() + 15
+
+while time.time() < deadline:
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT id FROM messages WHERE envelope_rcpt = ? ORDER BY id DESC LIMIT 1",
+                (rcpt,),
+            ).fetchone()
+        if row:
+            sys.exit(0)
+    except sqlite3.Error:
+        pass
+    time.sleep(1)
+
+sys.exit(1)
+PY
+  then
+    echo "ERROR: smoke test message not ingested within timeout." >&2
+    exit 1
+  fi
+  bind_host="${QUAIL_BIND_HOST:-127.0.0.1}"
+  bind_port="${QUAIL_BIND_PORT:-8000}"
+  echo "Smoke test passed: message ingested for ${test_rcpt}."
+  echo "UI reachable at http://${bind_host}:${bind_port}/"
+fi
 
 echo "Quail install complete."
