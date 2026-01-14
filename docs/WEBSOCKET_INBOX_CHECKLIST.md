@@ -51,17 +51,17 @@ Acceptance criteria:
 
 ## Phase 3: WebSocket Inbox (Single Process)
 
-**Objective:** Add WebSocket inbox updates with a safe fallback.
+**Objective:** Add WebSocket inbox updates with a safe fallback and opt-out flag.
 
 Checklist:
 - Implement `/ws/inbox` per `docs/WEBSOCKET_INBOX_PLAN.md`.
 - Implement an in-memory connection manager keyed by inbox filter.
 - Emit snapshot on connect; emit delta updates on ingest/admin/purge changes.
 - Keep ETag polling as a fallback if WebSocket fails.
-- Add a feature flag to keep polling as the default until WS is verified.
+- Add a feature flag so polling-only remains available (`QUAIL_ENABLE_WS=false`).
 
 Acceptance criteria:
-- WebSocket connects and delivers a snapshot payload.
+- WebSocket connects and delivers a snapshot payload by default.
 - Inbox updates without full-page reloads when new messages arrive.
 - When WebSocket fails, polling resumes automatically.
 - Admin/non-admin access rules match `/api/inbox` behavior.

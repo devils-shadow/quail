@@ -51,6 +51,7 @@ No SaaS. No external dependencies. One operator. Low volume.
 - Provides:
   - Ingest entrypoint (invoked by Postfix)
   - Web UI + API
+- Web UI supports WebSocket inbox updates by default; polling remains as fallback
 - UI must NOT be publicly accessible
 - VPN-only or interface-restricted access
 

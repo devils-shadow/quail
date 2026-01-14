@@ -59,6 +59,12 @@ if [[ -f /etc/quail/config.env ]]; then
   set +a
 fi
 
+if [[ -f /etc/quail/config.env ]]; then
+  if ! grep -q "^QUAIL_ENABLE_WS=" /etc/quail/config.env; then
+    printf '\nQUAIL_ENABLE_WS=true\n' >> /etc/quail/config.env
+  fi
+fi
+
 db_path="${QUAIL_DB_PATH:-/var/lib/quail/quail.db}"
 pin_already_set=0
 if [[ -f "${db_path}" ]]; then

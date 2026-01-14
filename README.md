@@ -26,6 +26,7 @@ release updates.
 ## Web UI
 
 - ETag-aware inbox auto-refresh with recent filter history.
+- WebSocket inbox updates enabled by default; opt out via `QUAIL_ENABLE_WS=false`.
 - Message detail pages with HTML, plaintext, and attachments tabs; attachments
   are available for download when present.
 - Quarantine review with bulk restore/delete actions and rule creation flows.

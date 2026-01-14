@@ -33,9 +33,9 @@ See `docs/MODES.md` for VPN VM mode vs reverse-proxy mode guidance and the
 
 ### WebSocket inbox
 
-Enable WebSocket inbox updates by setting `QUAIL_ENABLE_WS=true` in
-`/etc/quail/config.env`. When disabled, the inbox uses the existing polling
-behavior.
+WebSocket inbox updates are enabled by default. To opt out, set
+`QUAIL_ENABLE_WS=false` in `/etc/quail/config.env`. When disabled, the inbox
+uses the existing polling behavior.
 
 ## Upgrade
 

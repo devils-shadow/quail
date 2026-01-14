@@ -69,7 +69,7 @@ MAX_LIST_ROWS = 200
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
-ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "false").strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

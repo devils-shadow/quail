@@ -27,6 +27,11 @@ if [[ -f /etc/quail/config.env ]]; then
   source /etc/quail/config.env
   set +a
 fi
+if [[ -f /etc/quail/config.env ]]; then
+  if ! grep -q "^QUAIL_ENABLE_WS=" /etc/quail/config.env; then
+    printf '\nQUAIL_ENABLE_WS=true\n' >> /etc/quail/config.env
+  fi
+fi
 if [[ -z "${QUAIL_DOMAINS:-}" ]]; then
   echo "WARNING: QUAIL_DOMAINS is not set in /etc/quail/config.env." >&2
   echo "Upgrades will continue, but new installs require this value to be configured." >&2
