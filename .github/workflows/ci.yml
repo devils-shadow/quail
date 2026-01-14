@@ -30,9 +30,6 @@ jobs:
         run: ruff check .
       - name: Check formatting with Black
         run: black --check .
-      - name: Show Black diff (temporary)
-        if: failure()
-        run: black --diff .
       - name: Compile Python sources
         run: python -m compileall quail
       - name: Run tests

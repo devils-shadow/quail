@@ -119,9 +119,7 @@ def _purge_quarantine_messages(
     batch_size: int,
 ) -> tuple[int, int]:
     retention_values = [default_retention_days, *overrides.values()]
-    min_retention_days = (
-        min(retention_values) if retention_values else default_retention_days
-    )
+    min_retention_days = min(retention_values) if retention_values else default_retention_days
     cutoff_min = now - timedelta(days=min_retention_days)
     purged_messages = 0
     purged_attachments = 0
@@ -186,9 +184,7 @@ def _purge_messages(
 ) -> tuple[int, int]:
     cutoff = now - timedelta(days=retention_days)
     with db.get_connection(db_path) as conn:
-        inbox_messages, inbox_attachments = _purge_inbox_messages(
-            db_path, conn, cutoff, batch_size
-        )
+        inbox_messages, inbox_attachments = _purge_inbox_messages(db_path, conn, cutoff, batch_size)
         quarantine_messages, quarantine_attachments = _purge_quarantine_messages(
             db_path,
             conn,
