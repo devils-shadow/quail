@@ -2,9 +2,8 @@
 
 Quail is a self-hosted, receive-only mail sink for internal QA/dev teams. It
 accepts inbound mail on configured domains (example: `mail.example.test`) and
-exposes a private shared inbox UI. See
-[QUAIL_CODEX_CONTEXT.md](QUAIL_CODEX_CONTEXT.md) for the authoritative
-requirements, including the domain policy/rule/quarantine model.
+exposes a private shared inbox UI. For the domain policy/rule/quarantine
+decision model, see the [architecture overview](docs/ARCHITECTURE.md).
 
 If you want the step-by-step operator playbook, head to the
 [runbook](docs/RUNBOOK.md). 🐦
