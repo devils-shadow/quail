@@ -351,9 +351,18 @@
         justify-content: center;
       }
 
+      .button:hover {
+        background: var(--primary-dark);
+        border-color: var(--primary-dark);
+      }
+
       .button.secondary {
         background: var(--button-secondary-bg);
         color: var(--primary);
+      }
+
+      .button.secondary:hover {
+        background: var(--table-head);
       }
 
       .button.icon {
@@ -735,6 +744,14 @@
         transform: translateX(-12px);
         transition: transform 0.2s ease;
         z-index: 2;
+      }
+
+      .theme-toggle:hover .theme-toggle__thumb {
+        background: var(--primary-dark);
+      }
+
+      [data-theme="dark"] .theme-toggle:hover .theme-toggle__thumb {
+        background: var(--primary-dark);
       }
 
       [data-theme="dark"] .theme-toggle__thumb {
