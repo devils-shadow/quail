@@ -404,6 +404,15 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
         _now_iso(),
     )
 
+    db.log_inbox_event(
+        settings.db_path,
+        _now_iso(),
+        "added",
+        message_id=int(message_id),
+        envelope_rcpt=envelope_rcpt,
+        quarantined=1 if is_quarantined else 0,
+    )
+
     if status == "DROP":
         LOGGER.warning("Message dropped by ingest policy for %s.", envelope_rcpt)
     elif status == "QUARANTINE":
@@ -414,12 +423,22 @@ def main(argv: Iterable[str] | None = None) -> int:
     configure_logging()
     args = _parse_args(argv or sys.argv[1:])
 
+    settings = get_settings()
+    db.init_db(settings.db_path)
+
+    envelope_rcpt = args.envelope_rcpt or "unknown"
     raw_bytes = sys.stdin.buffer.read()
     if not raw_bytes:
         LOGGER.error("No email content received on stdin.")
+        db.log_ingest_attempt(
+            settings.db_path,
+            _now_iso(),
+            "FAILURE",
+            envelope_rcpt=envelope_rcpt,
+            error_summary="No email content received on stdin.",
+        )
         return 1
 
-    settings = get_settings()
     max_bytes = settings.max_message_size_mb * 1024 * 1024
     if len(raw_bytes) > max_bytes:
         LOGGER.error(
@@ -427,10 +446,29 @@ def main(argv: Iterable[str] | None = None) -> int:
             len(raw_bytes),
             settings.max_message_size_mb,
         )
+        db.log_ingest_attempt(
+            settings.db_path,
+            _now_iso(),
+            "FAILURE",
+            envelope_rcpt=envelope_rcpt,
+            error_summary="Message size exceeds configured max; dropped.",
+        )
         return 0
 
-    envelope_rcpt = args.envelope_rcpt or "unknown"
-    ingest(raw_bytes, envelope_rcpt)
+    try:
+        ingest(raw_bytes, envelope_rcpt)
+    except Exception as exc:
+        LOGGER.exception("Ingest failed for recipient %s.", envelope_rcpt)
+        db.log_ingest_attempt(
+            settings.db_path,
+            _now_iso(),
+            "FAILURE",
+            envelope_rcpt=envelope_rcpt,
+            error_summary=str(exc),
+        )
+        return 1
+
+    db.log_ingest_attempt(settings.db_path, _now_iso(), "SUCCESS", envelope_rcpt=envelope_rcpt)
     LOGGER.info("Message ingested for recipient %s.", envelope_rcpt)
     return 0
 

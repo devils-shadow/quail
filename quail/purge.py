@@ -14,9 +14,9 @@ from disk.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sqlite3
 
 from quail import db
 from quail.logging_config import configure_logging
@@ -25,6 +25,11 @@ from quail.settings import get_quarantine_retention_days, get_retention_days, ge
 LOGGER = logging.getLogger(__name__)
 BATCH_SIZE = 200
 AUDIT_RETENTION_DAYS = 30
+INBOX_EVENT_RETENTION_DAYS = 1
+
+
+def _now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _delete_eml(eml_path: Path) -> None:
@@ -57,6 +62,7 @@ def _extract_domain(envelope_rcpt: str) -> str | None:
 
 
 def _purge_inbox_messages(
+    db_path: Path,
     conn: sqlite3.Connection,
     cutoff: datetime,
     batch_size: int,
@@ -66,7 +72,7 @@ def _purge_inbox_messages(
     last_seen: tuple[str, int] | None = None
     while True:
         query = """
-            SELECT id, received_at, eml_path
+            SELECT id, received_at, envelope_rcpt, eml_path, quarantined
             FROM messages
             WHERE received_at < ?
               AND status = 'INBOX'
@@ -90,6 +96,14 @@ def _purge_inbox_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
+            _log_inbox_event(
+                conn,
+                _now_iso(),
+                "deleted",
+                message_id=row["id"],
+                envelope_rcpt=row["envelope_rcpt"],
+                quarantined=row["quarantined"],
+            )
             conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
             purged_messages += 1
         last_seen = (rows[-1]["received_at"], rows[-1]["id"])
@@ -98,6 +112,7 @@ def _purge_inbox_messages(
 
 
 def _purge_quarantine_messages(
+    db_path: Path,
     conn: sqlite3.Connection,
     now: datetime,
     default_retention_days: int,
@@ -145,6 +160,14 @@ def _purge_quarantine_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
+            _log_inbox_event(
+                conn,
+                _now_iso(),
+                "deleted",
+                message_id=row["id"],
+                envelope_rcpt=row["envelope_rcpt"],
+                quarantined=row["quarantined"],
+            )
             conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
             purged_messages += 1
             last_seen = (row["received_at"], row["id"])
@@ -162,8 +185,9 @@ def _purge_messages(
 ) -> tuple[int, int]:
     cutoff = now - timedelta(days=retention_days)
     with db.get_connection(db_path) as conn:
-        inbox_messages, inbox_attachments = _purge_inbox_messages(conn, cutoff, batch_size)
+        inbox_messages, inbox_attachments = _purge_inbox_messages(db_path, conn, cutoff, batch_size)
         quarantine_messages, quarantine_attachments = _purge_quarantine_messages(
+            db_path,
             conn,
             now,
             quarantine_retention_days,
@@ -183,6 +207,37 @@ def _purge_admin_actions(conn: sqlite3.Connection, cutoff: datetime) -> int:
     )
     conn.commit()
     return cursor.rowcount
+
+
+def _purge_inbox_events(conn: sqlite3.Connection, cutoff: datetime) -> int:
+    cursor = conn.execute(
+        "DELETE FROM inbox_events WHERE occurred_at < ?",
+        (cutoff.isoformat(),),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+def _log_inbox_event(
+    conn: sqlite3.Connection,
+    occurred_at: str,
+    event_type: str,
+    message_id: int | None = None,
+    envelope_rcpt: str | None = None,
+    quarantined: int = 0,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO inbox_events (
+            occurred_at,
+            event_type,
+            message_id,
+            envelope_rcpt,
+            quarantined
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (occurred_at, event_type, message_id, envelope_rcpt, quarantined),
+    )
 
 
 def main() -> int:
@@ -215,6 +270,7 @@ def main() -> int:
         purged_audit_actions = _purge_admin_actions(
             conn, now - timedelta(days=AUDIT_RETENTION_DAYS)
         )
+        _purge_inbox_events(conn, now - timedelta(days=INBOX_EVENT_RETENTION_DAYS))
 
     LOGGER.info(
         "Retention purge complete (retention=%s days, quarantine_retention=%s days, "

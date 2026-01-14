@@ -2,16 +2,19 @@
 
 Quail is a self-hosted, receive-only mail sink for internal QA/dev teams. It
 accepts inbound mail on configured domains (example: `mail.example.test`) and
-exposes a private shared inbox UI. See
-`QUAIL_CODEX_CONTEXT.md` for the authoritative requirements and constraints.
+exposes a private shared inbox UI. For the domain policy/rule/quarantine
+decision model, see the [architecture overview](docs/ARCHITECTURE.md).
 
-## Status
+If you want the step-by-step operator playbook, head to the
+[runbook](docs/RUNBOOK.md). 🐦
+
+## ✅ Status
 
 Core ingest, UI, and admin workflows are implemented and actively maintained.
-Quail is production-oriented for internal QA use; see `CHANGELOG.md` for
-release updates.
+Quail is production-oriented for internal QA use; see the
+[changelog](CHANGELOG.md) for release updates.
 
-## Ingest
+## 📥 Ingest
 
 - Postfix pipes messages to `scripts/quail-ingest`, which runs the ingest module
   with the `/opt/quail/venv` interpreter and ensures the repo root is on
@@ -23,23 +26,39 @@ release updates.
 - Deterministic domain policies and address/content rules set status (INBOX,
   QUARANTINE, DROP) and record a decision log row with operator metadata.
 
-## Web UI
+## 🖥️ Web UI
 
 - ETag-aware inbox auto-refresh with recent filter history.
+- WebSocket inbox updates enabled by default; opt out via `QUAIL_ENABLE_WS=false`.
 - Message detail pages with HTML, plaintext, and attachments tabs; attachments
   are available for download when present.
 - Quarantine review with bulk restore/delete actions and rule creation flows.
 
-## Configuration
+## 🧰 Configuration
 
-Copy `config/config.example.env` to `/etc/quail/config.env` and adjust values as
-needed. The default bind host in the example config is `127.0.0.1`, so the
-service binds to localhost unless you change it; use a reverse proxy and DNS if
-you need external access. Set `QUAIL_DOMAINS` to a comma-separated list of
-domains that `install.sh` registers in Postfix transport maps and relay
-domains; the installer will fail fast if you leave the example value in place.
+Use this checklist before running `install.sh`:
 
-## Admin access
+1) Run the installer: `sudo ./install.sh` (optional: `--smoke-test`).
+2) Follow the prompts to set required values (`QUAIL_DOMAINS`, `QUAIL_ADMIN_PIN`)
+   and confirm bind host/storage settings.
+3) Verify services: `systemctl status quail quail-purge.timer`.
+4) If nginx terminates TLS, add `proxy_pass http://127.0.0.1:8000;` plus
+   WebSocket upgrade headers (see the [runbook](docs/RUNBOOK.md)) and reload
+   nginx.
+
+Advanced: `install.sh` writes `/etc/quail/config.env`. You can edit this file
+directly if you prefer manual configuration.
+
+### 🔁 Upgrades
+
+To upgrade an existing install:
+
+1) Pull the latest changes into `/opt/quail`.
+2) Run `sudo ./upgrade.sh` to update dependencies and restart services. You can
+   opt in to changing the admin PIN during the upgrade when prompted.
+3) Verify services: `systemctl status quail quail-purge.timer`.
+
+## 🔐 Admin access
 
 - Admin actions are gated by a shared PIN stored as a hash in SQLite
   (`admin_pin_hash`) with short-lived unlock sessions.
@@ -49,7 +68,7 @@ domains; the installer will fail fast if you leave the example value in place.
   optional per-domain quarantine overrides.
 - The settings page includes ingest visibility metrics and a 30-day audit log.
 
-## HTML rendering
+## 🧩 HTML rendering
 
 - When enabled in settings, HTML renders in a sandboxed iframe alongside
   plaintext and attachments.
@@ -59,7 +78,17 @@ domains; the installer will fail fast if you leave the example value in place.
 - In dark mode, minimal HTML messages inherit the app theme for readable
   contrast without altering richer layouts.
 
-## Install location
+## 🧪 Testing
+
+- See the [testing guide](docs/TESTING.md) for pytest markers, standard
+  commands, and CI coverage.
+
+## 🧭 Deprecations
+
+- Framework deprecation notes and a minimal migration plan live in the
+  [deprecations guide](docs/DEPRECATIONS.md).
+
+## 📁 Install location
 
 The install script and systemd units assume the repository is cloned to
 `/opt/quail`. If you want to install from `/home/user`, you must update

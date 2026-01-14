@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file. This projec
 
 ## [Unreleased]
 
-- None.
+- install.sh now initializes the admin PIN from `QUAIL_ADMIN_PIN` when unset.
+- upgrade.sh can reset the admin PIN when `QUAIL_RESET_PIN=true`.
 
 ## [0.3.0] - 2026-01-13
 

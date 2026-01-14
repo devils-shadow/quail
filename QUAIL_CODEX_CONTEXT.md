@@ -51,6 +51,7 @@ No SaaS. No external dependencies. One operator. Low volume.
 - Provides:
   - Ingest entrypoint (invoked by Postfix)
   - Web UI + API
+- Web UI supports WebSocket inbox updates by default; polling remains as fallback
 - UI must NOT be publicly accessible
 - VPN-only or interface-restricted access
 
@@ -68,6 +69,18 @@ No SaaS. No external dependencies. One operator. Low volume.
   - Message-ID
   - Size
 - Insert metadata into SQLite
+- Apply deterministic domain policy and address/content rules to set status:
+  - `INBOX`, `QUARANTINE`, or `DROP`
+- Record ingest decision metadata (rule match, timestamps, reasons) in SQLite
+
+### Domain Policy + Rules
+- Domain policy modes: `OPEN`, `RESTRICTED`, `PAUSED`
+- Domain policy default actions: `INBOX`, `QUARANTINE`, `DROP`
+- Address/content rules:
+  - Rule types: `ALLOW`, `BLOCK`
+  - Match fields: `RCPT_LOCALPART`, `MAIL_FROM`, `FROM_DOMAIN`, `SUBJECT`
+  - Regex patterns supported
+- Rules and policies apply only to new ingests (no retroactive reprocessing)
 
 ### Attachments
 - Default allowed type: **PDF only**
@@ -89,10 +102,13 @@ No SaaS. No external dependencies. One operator. Low volume.
 
 - Default retention: 30 days
 - Configurable via admin UI
+- Quarantine retention default: 3 days
+- Optional per-domain quarantine retention overrides via admin UI
 - Daily purge job deletes:
   - `.eml`
   - Extracted attachments
   - Database rows
+  - Admin audit log entries older than 30 days
 - Admin deletions remove messages immediately
 
 ---
@@ -104,12 +120,17 @@ No SaaS. No external dependencies. One operator. Low volume.
 - Admin session TTL: 15–30 minutes
 - Rate-limit PIN attempts
 - Log admin actions (timestamp + source IP)
+- Admin PIN is configured during install via `QUAIL_ADMIN_PIN`
 
 Admin-only actions:
 - Change global settings
 - Delete messages
 - Enable/disable HTML rendering
 - Modify attachment rules
+- Manage domain policies and quarantine retention overrides
+- Manage allow/block rules
+- Review quarantine, restore, and delete quarantined messages
+- Update the admin PIN via settings UI
 
 ---
 
@@ -131,13 +152,13 @@ Codex must create and work within the following structure:
 
 quail/
 README.md
-CODEX_CONTEXT.md
+QUAIL_CODEX_CONTEXT.md
 .gitignore
 requirements.txt
 pyproject.toml
 
 quail/
-init.py
+__init__.py
 web.py
 ingest.py
 purge.py
@@ -151,6 +172,7 @@ inbox.html
 message.html
 admin_unlock.html
 admin_settings.html
+admin_quarantine.html
 
 scripts/
 quail-ingest
@@ -207,13 +229,14 @@ upgrade.sh must:
 - Update dependencies if needed
 - Restart services cleanly
 - Never delete stored mail
-- Never modify retention or admin data
+- Never modify retention data
+- Allow optional admin PIN reset when `QUAIL_RESET_PIN=true` and `QUAIL_ADMIN_PIN` is set
 
 ---
 
 ## 12. Operational Assumptions
 
-- Host is a spare laptop running Ubuntu Server
+- Host is a dedicated VM
 - Access via SSH and VPN
 - Email volume: low (tens/day at most)
 - Maintainability > cleverness

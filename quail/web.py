@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import hashlib
 import logging
+import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -24,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover - depends on optional dependency
     CSSSanitizer = None
 from argon2.exceptions import InvalidHash, VerifyMismatchError
-from fastapi import FastAPI, Form, HTTPException, Request, Response
+from fastapi import FastAPI, Form, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -67,11 +69,48 @@ MAX_LIST_ROWS = 200
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "true").strip().lower() in {"1", "true", "yes", "on"}
+RAW_ALLOWED_ORIGINS = os.getenv("QUAIL_ALLOWED_ORIGINS", "")
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 LOGGER = logging.getLogger(__name__)
+INBOX_HUB = None
+WS_EVENT_TASK: asyncio.Task | None = None
+
+
+class InboxHub:
+    def __init__(self) -> None:
+        self.connections: dict[tuple[str, bool], set[WebSocket]] = {}
+        self.lock = asyncio.Lock()
+
+    async def connect(self, ws: WebSocket, inbox_filter: str, is_admin: bool) -> None:
+        await ws.accept()
+        async with self.lock:
+            self.connections.setdefault((inbox_filter, is_admin), set()).add(ws)
+
+    async def disconnect(self, ws: WebSocket, inbox_filter: str, is_admin: bool) -> None:
+        async with self.lock:
+            self.connections.get((inbox_filter, is_admin), set()).discard(ws)
+
+    async def broadcast(
+        self, inbox_filter: str, is_admin: bool, payload: dict[str, object]
+    ) -> None:
+        async with self.lock:
+            connections = list(self.connections.get((inbox_filter, is_admin), set()))
+        if not connections:
+            return
+        stale: list[WebSocket] = []
+        for ws in connections:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                stale.append(ws)
+        if stale:
+            async with self.lock:
+                for ws in stale:
+                    self.connections.get((inbox_filter, is_admin), set()).discard(ws)
 
 
 def _now() -> datetime:
@@ -85,6 +124,32 @@ def _get_client_ip(request: Request) -> str:
     if request.client:
         return request.client.host
     return "unknown"
+
+
+def _normalize_inbox_filter(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    cleaned = raw_value.strip()
+    return cleaned or None
+
+
+def _build_allowed_origins(request: Request | WebSocket) -> set[str]:
+    host = request.headers.get("host", "")
+    allowed = {f"https://{host}", f"http://{host}"} if host else set()
+    if RAW_ALLOWED_ORIGINS:
+        for entry in RAW_ALLOWED_ORIGINS.split(","):
+            value = entry.strip()
+            if value:
+                allowed.add(value)
+    return allowed
+
+
+def _origin_allowed(request: Request | WebSocket) -> bool:
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    allowed = _build_allowed_origins(request)
+    return origin in allowed
 
 
 def _init_settings(settings_path: Path) -> None:
@@ -166,7 +231,9 @@ def _reset_rate_limit(settings_db_path: Path, source_ip: str) -> None:
     db.clear_rate_limit_state(settings_db_path, source_ip)
 
 
-def _is_admin(request: Request) -> bool:
+def _is_admin_token(token: str | None) -> bool:
+    if not token:
+        return False
     settings = get_settings()
     token_hash, expires_at = _get_session_state(settings.db_path)
     if not token_hash or not expires_at:
@@ -174,13 +241,14 @@ def _is_admin(request: Request) -> bool:
     if expires_at < _now():
         _clear_session_state(settings.db_path)
         return False
-    token = request.cookies.get(ADMIN_SESSION_COOKIE)
-    if not token:
-        return False
     try:
         return verify_pin(token, token_hash)
     except Exception:
         return False
+
+
+def _is_admin(request: Request) -> bool:
+    return _is_admin_token(request.cookies.get(ADMIN_SESSION_COOKIE))
 
 
 def _serialize_admin_snapshot(value: object | None) -> str | None:
@@ -422,6 +490,139 @@ def _build_inbox_filter_condition(inbox_filter: str) -> tuple[str, str]:
     else:
         local_pattern = f"%{_escape_like(cleaned)}%"
     return "LOWER(envelope_rcpt) LIKE ? ESCAPE '\\'", f"{local_pattern}@%"
+
+
+def _matches_inbox_filter(envelope_rcpt: str | None, inbox_filter: str) -> bool:
+    if not inbox_filter:
+        return True
+    if not envelope_rcpt:
+        return False
+    envelope = envelope_rcpt.lower()
+    cleaned = inbox_filter.strip().lower()
+    if "@" in cleaned:
+        if "*" in cleaned:
+            pattern = re.escape(cleaned).replace(r"\*", ".*")
+            return re.match(rf"^{pattern}$", envelope) is not None
+        return envelope == cleaned
+    if "*" in cleaned:
+        pattern = re.escape(cleaned).replace(r"\*", ".*")
+        return re.match(rf"^{pattern}@.*$", envelope) is not None
+    return cleaned in envelope.split("@", maxsplit=1)[0]
+
+
+def _fetch_inbox_messages(
+    db_path: Path, is_admin: bool, inbox_filter: str | None
+) -> list[dict[str, str]]:
+    return list(_iter_messages(db_path, include_quarantined=is_admin, inbox_filter=inbox_filter))
+
+
+def _compute_inbox_etag(
+    is_admin: bool, inbox_filter: str | None, messages: list[dict[str, str]]
+) -> str:
+    etag_source = json.dumps(
+        {
+            "is_admin": is_admin,
+            "inbox_filter": inbox_filter or "",
+            "messages": [
+                {
+                    "id": message.get("id"),
+                    "received_at": message.get("received_at"),
+                    "from_addr": message.get("from_addr"),
+                    "subject": message.get("subject"),
+                    "envelope_rcpt": message.get("envelope_rcpt"),
+                    "quarantined": message.get("quarantined"),
+                }
+                for message in messages
+            ],
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return f"\"{hashlib.sha256(etag_source.encode('utf-8')).hexdigest()}\""
+
+
+def _build_inbox_snapshot(
+    db_path: Path, is_admin: bool, inbox_filter: str | None
+) -> tuple[list[dict[str, str]], str]:
+    messages = _fetch_inbox_messages(db_path, is_admin, inbox_filter)
+    etag = _compute_inbox_etag(is_admin, inbox_filter, messages)
+    return messages, etag
+
+
+def _get_message_summary(db_path: Path, message_id: int) -> dict[str, str] | None:
+    with db.get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
+            FROM messages
+            WHERE id = ?
+            """,
+            (message_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+async def _ws_event_loop() -> None:
+    settings = get_settings()
+    last_event_id = db.get_last_inbox_event_id(settings.db_path)
+    try:
+        while True:
+            events = [dict(row) for row in db.list_inbox_events(settings.db_path, last_event_id)]
+            if not events:
+                await asyncio.sleep(1)
+                continue
+            for event in events:
+                last_event_id = event["id"]
+                await _broadcast_inbox_event(settings.db_path, event)
+    except asyncio.CancelledError:
+        return
+
+
+async def _broadcast_inbox_event(db_path: Path, event: dict[str, object]) -> None:
+    if INBOX_HUB is None:
+        return
+    event_type = str(event.get("event_type") or "")
+    message_id = event.get("message_id")
+    envelope_rcpt = event.get("envelope_rcpt") or ""
+    quarantined = int(event.get("quarantined") or 0)
+    message_payload = None
+    if event_type in {"added", "updated"} and message_id is not None:
+        message_payload = _get_message_summary(db_path, int(message_id))
+        if not message_payload:
+            event_type = "deleted"
+    async with INBOX_HUB.lock:
+        targets = list(INBOX_HUB.connections.keys())
+    for inbox_filter, is_admin in targets:
+        if event_type == "deleted":
+            if message_id is None:
+                continue
+            if not _matches_inbox_filter(envelope_rcpt, inbox_filter):
+                continue
+            _, etag = _build_inbox_snapshot(db_path, is_admin, inbox_filter or None)
+            payload = {
+                "type": "delta",
+                "added": [],
+                "updated": [],
+                "deleted": [message_id],
+                "etag": etag,
+            }
+            await INBOX_HUB.broadcast(inbox_filter, is_admin, payload)
+            continue
+        if message_payload is None:
+            continue
+        if quarantined and not is_admin:
+            continue
+        if not _matches_inbox_filter(message_payload.get("envelope_rcpt"), inbox_filter):
+            continue
+        _, etag = _build_inbox_snapshot(db_path, is_admin, inbox_filter or None)
+        payload = {
+            "type": "delta",
+            "added": [message_payload] if event_type == "added" else [],
+            "updated": [message_payload] if event_type == "updated" else [],
+            "deleted": [],
+            "etag": etag,
+        }
+        await INBOX_HUB.broadcast(inbox_filter, is_admin, payload)
 
 
 def _extract_primary_address(raw_value: str | None) -> str | None:
@@ -829,6 +1030,14 @@ def _delete_path(path: Path) -> None:
 def _delete_message(settings_db_path: Path, message_id: int) -> None:
     message = _get_message(settings_db_path, message_id)
     attachments = _get_message_attachments(settings_db_path, message_id)
+    db.log_inbox_event(
+        settings_db_path,
+        _now().isoformat(),
+        "deleted",
+        message_id=message_id,
+        envelope_rcpt=message.get("envelope_rcpt"),
+        quarantined=1 if message.get("quarantined") else 0,
+    )
     for attachment in attachments:
         _delete_path(Path(attachment["stored_path"]))
     _delete_path(Path(message["eml_path"]))
@@ -840,9 +1049,20 @@ def _delete_message(settings_db_path: Path, message_id: int) -> None:
 def _delete_all_messages(settings_db_path: Path) -> int:
     with db.get_connection(settings_db_path) as conn:
         attachments = conn.execute("SELECT stored_path FROM attachments").fetchall()
-        messages = conn.execute("SELECT eml_path FROM messages").fetchall()
+        messages = conn.execute(
+            "SELECT id, eml_path, envelope_rcpt, quarantined FROM messages"
+        ).fetchall()
         conn.execute("DELETE FROM messages")
         conn.commit()
+    for message in messages:
+        db.log_inbox_event(
+            settings_db_path,
+            _now().isoformat(),
+            "deleted",
+            message_id=message["id"],
+            envelope_rcpt=message["envelope_rcpt"],
+            quarantined=message["quarantined"],
+        )
     for attachment in attachments:
         _delete_path(Path(attachment["stored_path"]))
     for message in messages:
@@ -852,6 +1072,10 @@ def _delete_all_messages(settings_db_path: Path) -> int:
 
 def _update_message_status(settings_db_path: Path, message_id: int, status: str) -> None:
     with db.get_connection(settings_db_path) as conn:
+        row = conn.execute(
+            "SELECT envelope_rcpt FROM messages WHERE id = ?",
+            (message_id,),
+        ).fetchone()
         conn.execute(
             """
             UPDATE messages
@@ -861,6 +1085,14 @@ def _update_message_status(settings_db_path: Path, message_id: int, status: str)
             (status, 0 if status == "INBOX" else 1, None if status == "INBOX" else "", message_id),
         )
         conn.commit()
+    db.log_inbox_event(
+        settings_db_path,
+        _now().isoformat(),
+        "updated",
+        message_id=message_id,
+        envelope_rcpt=row["envelope_rcpt"] if row else None,
+        quarantined=0 if status == "INBOX" else 1,
+    )
 
 
 def _html_to_text(html_body: str) -> str:
@@ -900,6 +1132,18 @@ async def _startup() -> None:
     settings = get_settings()
     db.init_db(settings.db_path)
     _init_settings(settings.db_path)
+    if ENABLE_WS:
+        global INBOX_HUB, WS_EVENT_TASK
+        INBOX_HUB = InboxHub()
+        WS_EVENT_TASK = asyncio.create_task(_ws_event_loop())
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    global WS_EVENT_TASK
+    if WS_EVENT_TASK:
+        WS_EVENT_TASK.cancel()
+        WS_EVENT_TASK = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -907,12 +1151,8 @@ async def _startup() -> None:
 async def inbox(request: Request) -> HTMLResponse:
     settings = get_settings()
     is_admin = _is_admin(request)
-    inbox_filter = request.query_params.get("inbox")
-    if inbox_filter:
-        inbox_filter = inbox_filter.strip() or None
-    messages = _iter_messages(
-        settings.db_path, include_quarantined=is_admin, inbox_filter=inbox_filter
-    )
+    inbox_filter = _normalize_inbox_filter(request.query_params.get("inbox"))
+    messages = _fetch_inbox_messages(settings.db_path, is_admin, inbox_filter)
     return templates.TemplateResponse(
         "inbox.html",
         {
@@ -920,6 +1160,7 @@ async def inbox(request: Request) -> HTMLResponse:
             "messages": messages,
             "is_admin": is_admin,
             "current_inbox": inbox_filter or "",
+            "enable_ws": ENABLE_WS,
         },
     )
 
@@ -928,35 +1169,41 @@ async def inbox(request: Request) -> HTMLResponse:
 async def inbox_api(request: Request) -> JSONResponse:
     settings = get_settings()
     is_admin = _is_admin(request)
-    inbox_filter = request.query_params.get("inbox")
-    if inbox_filter:
-        inbox_filter = inbox_filter.strip() or None
-    messages = _iter_messages(
-        settings.db_path, include_quarantined=is_admin, inbox_filter=inbox_filter
-    )
-    etag_source = json.dumps(
-        {
-            "is_admin": is_admin,
-            "inbox_filter": inbox_filter or "",
-            "messages": [
-                {
-                    "id": message.get("id"),
-                    "received_at": message.get("received_at"),
-                    "from_addr": message.get("from_addr"),
-                    "subject": message.get("subject"),
-                    "envelope_rcpt": message.get("envelope_rcpt"),
-                    "quarantined": message.get("quarantined"),
-                }
-                for message in messages
-            ],
-        },
-        sort_keys=True,
-        default=str,
-    )
-    etag = f"\"{hashlib.sha256(etag_source.encode('utf-8')).hexdigest()}\""
+    inbox_filter = _normalize_inbox_filter(request.query_params.get("inbox"))
+    messages, etag = _build_inbox_snapshot(settings.db_path, is_admin, inbox_filter)
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return JSONResponse({"messages": messages, "is_admin": is_admin}, headers={"ETag": etag})
+
+
+@app.websocket("/ws/inbox")
+async def inbox_ws(ws: WebSocket, inbox: str | None = None) -> None:
+    if not ENABLE_WS:
+        await ws.accept()
+        await ws.send_json({"type": "error", "detail": "WebSocket inbox disabled."})
+        await ws.close()
+        return
+    if not _origin_allowed(ws):
+        await ws.close(code=1008)
+        return
+    inbox_filter = _normalize_inbox_filter(inbox) or ""
+    is_admin = _is_admin_token(ws.cookies.get(ADMIN_SESSION_COOKIE))
+    if INBOX_HUB is None:
+        await ws.close()
+        return
+    await INBOX_HUB.connect(ws, inbox_filter, is_admin)
+    settings = get_settings()
+    messages, etag = _build_inbox_snapshot(settings.db_path, is_admin, inbox_filter or None)
+    await ws.send_json({"type": "snapshot", "messages": messages, "etag": etag})
+    try:
+        while True:
+            data = await ws.receive_json()
+            if data.get("type") == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await INBOX_HUB.disconnect(ws, inbox_filter, is_admin)
 
 
 @app.get("/message/{message_id}", response_class=HTMLResponse)
@@ -1143,6 +1390,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
     _log_admin_action(settings.db_path, "admin_settings_view", request, entity="settings")
     storage_stats = _get_storage_stats(settings.db_path)
     ingest_metrics = _get_ingest_metrics(settings.db_path)
+    ingest_attempts = [dict(row) for row in db.list_ingest_attempts(settings.db_path)]
     rules_domain = _normalize_domain(request.query_params.get("rules_domain"))
     rules = db.list_address_rules(settings.db_path, rules_domain) if rules_domain else []
     context = {
@@ -1166,6 +1414,7 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "ingest_last_24h": ingest_metrics["ingest_last_24h"],
         "recent_ingest_rate": ingest_metrics["recent_ingest_rate"],
         "top_sender_domains": ingest_metrics["top_sender_domains"],
+        "ingest_attempts": ingest_attempts,
         "domain_policies": [dict(row) for row in db.list_domain_policies(settings.db_path)],
         "domain_modes": DOMAIN_MODES,
         "domain_actions": DECISION_STATUSES,

@@ -1,6 +1,6 @@
 # Architecture
 
-This document summarizes the architecture described in `QUAIL_CODEX_CONTEXT.md` and serves as a high‑level overview for developers and reviewers.
+This document summarizes the architecture described in `QUAIL_CODEX_CONTEXT.md` and serves as a high‑level overview for developers and reviewers. The authoritative ingest decision model, including domain policy/rule/quarantine behavior, lives in `QUAIL_CODEX_CONTEXT.md`. Forward-looking design work is captured in `docs/QUAIL_2_0_SPEC.md`.
 
 ## Public Plane
 
@@ -8,7 +8,7 @@ Quail uses **Postfix** as its public facing SMTP server. The mail daemon listens
 
 ## Private Plane
 
-A single Python **FastAPI** service provides both the ingest entrypoint and the web UI/API【104907567664902†L49-L53】. The UI is deliberately not publicly accessible—access is restricted to VPN or interface‑restricted networks【104907567664902†L49-L54】. The service binds to localhost by default and should be reverse‑proxied or firewalled for remote access【104907567664902†L121-L123】.
+A single Python **FastAPI** service provides both the ingest entrypoint and the web UI/API【104907567664902†L49-L53】. The UI is deliberately not publicly accessible—access is restricted to VPN or interface‑restricted networks【104907567664902†L49-L54】. The service binds to localhost by default and can be reverse‑proxied or exposed directly over a VPN as needed【104907567664902†L121-L123】.
 
 ## Ingest Pipeline
 

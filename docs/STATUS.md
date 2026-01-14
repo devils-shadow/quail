@@ -2,21 +2,25 @@
 
 ## Current Version
 
-0.1.0
+0.3.0-beta.1
 
 ## Overview
 
-The initial repository scaffolding and ingest pipeline are in place. Retention purge jobs now support separate quarantine retention windows, while the broader FastAPI UI and installation/upgrade automation are still stubbed with TODOs.
+Quail is in active internal use with a complete inbox UI, admin workflows, and
+ingest/purge automation. HTML rendering is available via a sandboxed iframe,
+quarantine management is live, and retention policies are configurable.
 
 ## Known Issues
 
-- The full web UI for browsing messages and managing settings is incomplete.
-- Install and upgrade scripts may require additional hardening and error handling.
-- Admin PIN setup flow is manual and undocumented.
+- DMARC support is not implemented (required for internet-facing deployments).
+- WebSocket inbox updates are planned; current refresh uses ETag-aware polling.
+- FastAPI `on_event` startup handler and Starlette `TemplateResponse` signature
+  deprecations are pending migration; see `docs/DEPRECATIONS.md`.
 
 ## Next Milestones
 
-- Implement the complete FastAPI UI, including inbox and message detail views.
-- Finish the install and upgrade automation to meet the idempotent requirements【104907567664902†L190-L199】.
-- Add automated tests for ingest, UI and retention.
-- Implement a supported flow for setting the initial admin PIN【819940561035949†L30-L33】.
+- Evaluate DMARC integration for broader public deployment.
+- Implement WebSocket inbox updates per `docs/WEBSOCKET_INBOX_PLAN.md`.
+- Expand automated coverage and diagnostics for CI.
+- Plan a low-risk migration to FastAPI lifespan handlers and updated
+  `TemplateResponse` signatures.
