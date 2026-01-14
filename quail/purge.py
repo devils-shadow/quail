@@ -96,8 +96,8 @@ def _purge_inbox_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
-            db.log_inbox_event(
-                db_path,
+            _log_inbox_event(
+                conn,
                 _now_iso(),
                 "deleted",
                 message_id=row["id"],
@@ -160,8 +160,8 @@ def _purge_quarantine_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
-            db.log_inbox_event(
-                db_path,
+            _log_inbox_event(
+                conn,
                 _now_iso(),
                 "deleted",
                 message_id=row["id"],
@@ -216,6 +216,28 @@ def _purge_inbox_events(conn: sqlite3.Connection, cutoff: datetime) -> int:
     )
     conn.commit()
     return cursor.rowcount
+
+
+def _log_inbox_event(
+    conn: sqlite3.Connection,
+    occurred_at: str,
+    event_type: str,
+    message_id: int | None = None,
+    envelope_rcpt: str | None = None,
+    quarantined: int = 0,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO inbox_events (
+            occurred_at,
+            event_type,
+            message_id,
+            envelope_rcpt,
+            quarantined
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (occurred_at, event_type, message_id, envelope_rcpt, quarantined),
+    )
 
 
 def main() -> int:
