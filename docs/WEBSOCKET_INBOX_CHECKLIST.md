@@ -73,8 +73,8 @@ Acceptance criteria:
 **Objective:** Improve resilience and avoid drift in real deployments.
 
 Checklist:
-- Add reconnect backoff and visibility-aware reconnect.
-- Add drift detection and forced snapshot on mismatch.
+- Add reconnect backoff and visibility-aware reconnect. (done)
+- Add drift detection and forced snapshot on mismatch. (done)
 - Validate behavior in VPN VM mode and reverse-proxy mode.
 - Document operational notes and known limits in the WebSocket plan.
 

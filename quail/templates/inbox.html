@@ -110,6 +110,8 @@
   let refreshInFlight = false;
   let lastEtag = null;
   let ws = null;
+  let wsRetryMs = 1000;
+  let wsRetryTimer = null;
 
   const resetRows = () => {
     rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
@@ -455,6 +457,40 @@
     refreshTimer = null;
   };
 
+  const scheduleWsRetry = () => {
+    if (!wsEnabled || wsRetryTimer) {
+      return;
+    }
+    wsRetryTimer = window.setTimeout(() => {
+      wsRetryTimer = null;
+      startWebSocket();
+    }, wsRetryMs);
+    wsRetryMs = Math.min(wsRetryMs * 2, 10000);
+  };
+
+  const resetWsRetry = () => {
+    wsRetryMs = 1000;
+    if (wsRetryTimer) {
+      window.clearTimeout(wsRetryTimer);
+      wsRetryTimer = null;
+    }
+  };
+
+  const forceSnapshotRefresh = async () => {
+    try {
+      const response = await fetch(inboxApiUrl, { cache: "no-store" });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      if (payload && Array.isArray(payload.messages)) {
+        setCache(payload.messages);
+      }
+    } catch (error) {
+      // Ignore refresh errors.
+    }
+  };
+
   const handleWsMessage = (event) => {
     if (isPaused()) {
       return;
@@ -478,6 +514,19 @@
       return;
     }
     if (payload.type === "delta") {
+      const removed = Array.isArray(payload.deleted) ? payload.deleted : [];
+      const updated = Array.isArray(payload.updated) ? payload.updated : [];
+      const deletedMissing = removed.some((id) => !messageCache.has(String(id)));
+      const updatedMissing = updated.some(
+        (message) => !messageCache.has(String(message.id))
+      );
+      if (deletedMissing || updatedMissing) {
+        if (ws) {
+          ws.close();
+        }
+        forceSnapshotRefresh();
+        return;
+      }
       applyDelta(payload);
       if (payload.etag) {
         lastEtag = payload.etag;
@@ -493,11 +542,13 @@
     ws = new WebSocket(wsUrl);
     ws.addEventListener("open", () => {
       stopPolling();
+      resetWsRetry();
     });
     ws.addEventListener("message", handleWsMessage);
     ws.addEventListener("close", () => {
       ws = null;
       startPolling();
+      scheduleWsRetry();
     });
     ws.addEventListener("error", () => {
       if (ws) {
@@ -587,8 +638,21 @@
     updatePauseButton();
   }
 
+  const handleVisibilityChange = () => {
+    if (!wsEnabled) {
+      return;
+    }
+    if (document.hidden) {
+      return;
+    }
+    if (!ws) {
+      startWebSocket();
+    }
+  };
+
   if (wsEnabled) {
     startWebSocket();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
   } else {
     startPolling();
   }

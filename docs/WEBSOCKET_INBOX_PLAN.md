@@ -134,8 +134,10 @@ describes the current implementation and notes remaining hardening work.
 
 ## Remaining Hardening
 
-- Add reconnect backoff and visibility-aware reconnects.
-- Add drift detection and forced snapshots on mismatch.
+Completed in the current implementation:
+
+- Reconnect backoff and visibility-aware reconnects.
+- Drift detection with forced snapshot refresh on mismatch.
 
 ## Connection Lifecycle
 
