@@ -1,456 +1,629 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Admin Settings</h1>
-<p><a href="/admin/quarantine">View quarantine</a></p>
-{% if request.query_params.get("updated") %}
-<p>Settings updated.</p>
-{% endif %}
-{% if request.query_params.get("cleared") %}
-<p>All messages deleted.</p>
-{% endif %}
-{% if request.query_params.get("error") == "retention" %}
-<p>Retention must be a positive number.</p>
-{% endif %}
-{% if request.query_params.get("error") == "quarantine_retention" %}
-<p>Quarantine retention must be a positive number.</p>
-{% endif %}
-{% if request.query_params.get("error") == "pin_length" %}
-<p>Admin PIN must be 4-9 digits.</p>
-{% endif %}
-{% if request.query_params.get("error") == "pin_format" %}
-<p>Admin PIN must contain digits only.</p>
-{% endif %}
-{% if request.query_params.get("domain_saved") %}
-<p>Domain policy saved for {{ request.query_params.get("domain_saved") }}.</p>
-{% endif %}
-{% if request.query_params.get("domain_error") == "pin" %}
-<p>Admin PIN verification is required for domain policy changes.</p>
-{% endif %}
-{% if request.query_params.get("domain_error") == "domain" %}
-<p>Domain name is required to update a policy.</p>
-{% endif %}
-{% if request.query_params.get("domain_error") == "mode" %}
-<p>Domain mode must be one of: {{ domain_modes | join(", ") }}.</p>
-{% endif %}
-{% if request.query_params.get("domain_error") == "action" %}
-<p>Default action must be one of: {{ domain_actions | join(", ") }}.</p>
-{% endif %}
-{% if request.query_params.get("domain_error") == "retention" %}
-<p>Quarantine retention override must be a positive number.</p>
-{% endif %}
-{% if request.query_params.get("rules_saved") %}
-<p>Rule saved.</p>
-{% endif %}
-{% if request.query_params.get("rules_deleted") %}
-<p>Rule deleted.</p>
-{% endif %}
-{% if request.query_params.get("rules_error") %}
-<p>Rule error: {{ request.query_params.get("rules_error") }}</p>
-{% endif %}
-{% if request.query_params.get("rules_test") == "matched" %}
-<p>Rule test matched.</p>
-{% endif %}
-{% if request.query_params.get("rules_test") == "no_match" %}
-<p>Rule test did not match.</p>
-{% endif %}
-<form method="post" action="/admin/settings">
-  <div>
-    <label for="allowed_mime_types">Allowed attachment MIME types (comma-separated)</label>
-    <input id="allowed_mime_types" name="allowed_mime_types" type="text" value="{{ allowed_mime_types }}" />
+<div class="admin-page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Admin Settings</h1>
+      <p class="page-subtitle">Changes apply only to new ingests.</p>
+    </div>
+    <div class="toolbar">
+      <a class="button secondary round" href="/admin/quarantine">View quarantine</a>
+      <a class="button secondary round" href="/inbox">Back to inbox</a>
+    </div>
   </div>
-  <div>
-    <label for="retention_days">Retention days</label>
-    <input id="retention_days" name="retention_days" type="number" min="1" value="{{ retention_days }}" />
-  </div>
-  <div>
-    <label for="quarantine_retention_days">Quarantine retention days</label>
-    <input
-      id="quarantine_retention_days"
-      name="quarantine_retention_days"
-      type="number"
-      min="1"
-      value="{{ quarantine_retention_days }}"
-    />
-  </div>
-  <div>
-    <label for="allow_html">Allow HTML rendering (full)</label>
-    <input id="allow_html" name="allow_html" type="checkbox" value="true" {% if allow_html %}checked{% endif %} />
-  </div>
-  <div>
-    <label for="admin_pin">Update admin PIN (leave blank to keep)</label>
-    <input
-      id="admin_pin"
-      name="admin_pin"
-      type="password"
-      inputmode="numeric"
-      pattern="[0-9]*"
-      minlength="4"
-      maxlength="9"
-    />
-  </div>
-  <button type="submit">Save settings</button>
-</form>
 
-<h2>Domain policies</h2>
-<p>Changes apply only to new ingests.</p>
-{% if domain_policies %}
-  {% for policy in domain_policies %}
-  <form method="post" action="/admin/domain-policies">
-    <fieldset>
-      <legend>{{ policy.domain }}</legend>
-      <input type="hidden" name="domain" value="{{ policy.domain }}" />
-      <div>
-        <label for="mode_{{ loop.index }}">Mode</label>
-        <select id="mode_{{ loop.index }}" name="mode">
-          {% for mode in domain_modes %}
-          <option value="{{ mode }}" {% if policy.mode == mode %}selected{% endif %}>{{ mode }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="action_{{ loop.index }}">Default action</label>
-        <select id="action_{{ loop.index }}" name="default_action">
-          {% for action in domain_actions %}
-          <option value="{{ action }}" {% if policy.default_action == action %}selected{% endif %}>
-            {{ action }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="retention_{{ loop.index }}">Quarantine retention override (days)</label>
-        <input
-          id="retention_{{ loop.index }}"
-          name="quarantine_retention_days"
-          type="number"
-          min="1"
-          value="{{ policy.quarantine_retention_days or '' }}"
-        />
-      </div>
-      <div>
-        <label>Last modified</label>
-        <span>{{ policy.updated_at }}</span>
-      </div>
-      <div>
-        <label for="pin_{{ loop.index }}">Admin PIN</label>
-        <input
-          id="pin_{{ loop.index }}"
-          name="admin_pin"
-          type="password"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          minlength="4"
-          maxlength="9"
-        />
-      </div>
-      <button type="submit">Save</button>
-    </fieldset>
-  </form>
-  {% endfor %}
-{% else %}
-<p>No domain policies found yet. Add one below.</p>
-{% endif %}
-
-<h3>Add domain policy</h3>
-<form method="post" action="/admin/domain-policies">
-  <div>
-    <label for="domain_policy_domain">Domain</label>
-    <input id="domain_policy_domain" name="domain" type="text" />
+  <div class="alert-stack">
+    {% if request.query_params.get("updated") %}
+    <div class="alert success">Settings updated.</div>
+    {% endif %}
+    {% if request.query_params.get("cleared") %}
+    <div class="alert success">All messages deleted.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "retention" %}
+    <div class="alert error">Retention must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "quarantine_retention" %}
+    <div class="alert error">Quarantine retention must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "pin_length" %}
+    <div class="alert error">Admin PIN must be 4-9 digits.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "pin_format" %}
+    <div class="alert error">Admin PIN must contain digits only.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_saved") %}
+    <div class="alert success">Domain policy saved for {{ request.query_params.get("domain_saved") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "pin" %}
+    <div class="alert error">Admin PIN verification is required for domain policy changes.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "domain" %}
+    <div class="alert error">Domain name is required to update a policy.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "mode" %}
+    <div class="alert error">Domain mode must be one of: {{ domain_modes | join(", ") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "action" %}
+    <div class="alert error">Default action must be one of: {{ domain_actions | join(", ") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "retention" %}
+    <div class="alert error">Quarantine retention override must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_saved") %}
+    <div class="alert success">Rule saved.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_deleted") %}
+    <div class="alert success">Rule deleted.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_error") %}
+    <div class="alert error">Rule error: {{ request.query_params.get("rules_error") }}</div>
+    {% endif %}
+    {% if request.query_params.get("rules_test") == "matched" %}
+    <div class="alert success">Rule test matched.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_test") == "no_match" %}
+    <div class="alert warn">Rule test did not match.</div>
+    {% endif %}
   </div>
-  <div>
-    <label for="domain_policy_mode">Mode</label>
-    <select id="domain_policy_mode" name="mode">
-      {% for mode in domain_modes %}
-      <option value="{{ mode }}">{{ mode }}</option>
+
+  <section class="section">
+    <div class="card card--primary">
+      <div class="card__header">
+        <h2 class="card__title">Core settings</h2>
+        <p class="card__subtitle">Changes apply only to new ingests.</p>
+      </div>
+      <div class="card__body">
+        <form method="post" action="/admin/settings" class="form">
+          <div class="form__grid">
+            <div class="field">
+              <label
+                class="field__label tooltip-label"
+                for="allowed_mime_types"
+                data-tip="Comma-separated MIME types for attachments that are allowed (example: application/pdf,image/png). Messages with other attachment types are quarantined."
+              >
+                Allowed attachments
+              </label>
+              <input
+                class="field__control input"
+                id="allowed_mime_types"
+                name="allowed_mime_types"
+                type="text"
+                value="{{ allowed_mime_types }}"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label" for="retention_days">Retention days</label>
+              <input
+                class="field__control input"
+                id="retention_days"
+                name="retention_days"
+                type="number"
+                min="1"
+                value="{{ retention_days }}"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label" for="quarantine_retention_days">Quarantine retention days</label>
+              <input
+                class="field__control input"
+                id="quarantine_retention_days"
+                name="quarantine_retention_days"
+                type="number"
+                min="1"
+                value="{{ quarantine_retention_days }}"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label" for="admin_pin">Update admin PIN</label>
+              <input
+                class="field__control input"
+                id="admin_pin"
+                name="admin_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                minlength="4"
+                maxlength="9"
+              />
+            </div>
+            <div class="checkrow">
+              <input
+                id="allow_html"
+                name="allow_html"
+                type="checkbox"
+                value="true"
+                {% if allow_html %}checked{% endif %}
+              />
+              <div>
+                <label
+                  class="checkrow__label tooltip-label"
+                  for="allow_html"
+                  data-tip="Enables full HTML rendering in the message view. When disabled, only plaintext is shown."
+                >
+                  Allow rich HTML
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="card__actions">
+            <button class="button round btn" type="submit">Save core settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <h2>Domain policies</h2>
+      <p class="section-subtitle">Changes apply only to new ingests.</p>
+    </div>
+    {% if domain_policies %}
+      {% for policy in domain_policies %}
+      <div class="card domain-card">
+        <div class="card__header">
+          <h3 class="card__title">{{ policy.domain }}</h3>
+          <span class="card__meta">Last modified {{ policy.updated_at }}</span>
+        </div>
+        <div class="card__body">
+          <form method="post" action="/admin/domain-policies" class="form">
+            <input type="hidden" name="domain" value="{{ policy.domain }}" />
+            <div class="form__grid">
+              <div class="field">
+                <label class="field__label" for="mode_{{ loop.index }}">Mode</label>
+                <select class="field__control select" id="mode_{{ loop.index }}" name="mode">
+                  {% for mode in domain_modes %}
+                  <option value="{{ mode }}" {% if policy.mode == mode %}selected{% endif %}>{{ mode }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label class="field__label" for="action_{{ loop.index }}">Default action</label>
+                <select class="field__control select" id="action_{{ loop.index }}" name="default_action">
+                  {% for action in domain_actions %}
+                  <option value="{{ action }}" {% if policy.default_action == action %}selected{% endif %}>
+                    {{ action }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label class="field__label" for="retention_{{ loop.index }}">Quarantine retention override</label>
+                <input
+                  class="field__control input"
+                  id="retention_{{ loop.index }}"
+                  name="quarantine_retention_days"
+                  type="number"
+                  min="1"
+                  value="{{ policy.quarantine_retention_days or '' }}"
+                />
+              </div>
+              <div class="field">
+                <label class="field__label" for="pin_{{ loop.index }}">Admin PIN</label>
+                <input
+                  class="field__control input"
+                  id="pin_{{ loop.index }}"
+                  name="admin_pin"
+                  type="password"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  minlength="4"
+                  maxlength="9"
+                />
+              </div>
+            </div>
+            <div class="card__actions">
+              <button class="button round btn" type="submit">Save domain</button>
+            </div>
+          </form>
+        </div>
+      </div>
       {% endfor %}
-    </select>
-  </div>
-  <div>
-    <label for="domain_policy_action">Default action</label>
-    <select id="domain_policy_action" name="default_action">
-      {% for action in domain_actions %}
-      <option value="{{ action }}">{{ action }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div>
-    <label for="domain_policy_retention">Quarantine retention override (days)</label>
-    <input id="domain_policy_retention" name="quarantine_retention_days" type="number" min="1" />
-  </div>
-  <div>
-    <label for="domain_policy_pin">Admin PIN</label>
-    <input
-      id="domain_policy_pin"
-      name="admin_pin"
-      type="password"
-      inputmode="numeric"
-      pattern="[0-9]*"
-      minlength="4"
-      maxlength="9"
-    />
-  </div>
-  <button type="submit">Save domain policy</button>
-</form>
+    {% else %}
+    <div class="card empty-card">
+      <div class="card__body">
+        <p>No domain policies found yet. Add one below.</p>
+      </div>
+    </div>
+    {% endif %}
+  </section>
 
-<h2>Address/content rules</h2>
-<p>Manage allow/block rules for a domain. Changes apply only to new ingests.</p>
-<form method="get" action="/admin/settings">
-  <div>
-    <label for="rules_domain">Domain</label>
-    <input id="rules_domain" name="rules_domain" type="text" value="{{ rules_domain or '' }}" />
-  </div>
-  <button type="submit">Load rules</button>
-</form>
+  <section class="section">
+    <div class="card card--secondary">
+      <div class="card__header">
+        <h2 class="card__title">Add domain policy</h2>
+      </div>
+      <div class="card__body">
+        <form method="post" action="/admin/domain-policies" class="form">
+          <div class="form__grid">
+            <div class="field">
+              <label class="field__label" for="domain_policy_domain">Domain</label>
+              <input class="field__control input" id="domain_policy_domain" name="domain" type="text" />
+            </div>
+            <div class="field">
+              <label class="field__label" for="domain_policy_mode">Mode</label>
+              <select class="field__control select" id="domain_policy_mode" name="mode">
+                {% for mode in domain_modes %}
+                <option value="{{ mode }}">{{ mode }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="domain_policy_action">Default action</label>
+              <select class="field__control select" id="domain_policy_action" name="default_action">
+                {% for action in domain_actions %}
+                <option value="{{ action }}">{{ action }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="domain_policy_retention">Quarantine retention override</label>
+              <input
+                class="field__control input"
+                id="domain_policy_retention"
+                name="quarantine_retention_days"
+                type="number"
+                min="1"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label" for="domain_policy_pin">Admin PIN</label>
+              <input
+                class="field__control input"
+                id="domain_policy_pin"
+                name="admin_pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                minlength="4"
+                maxlength="9"
+              />
+            </div>
+          </div>
+          <div class="card__actions">
+            <button class="button round btn" type="submit">Add domain policy</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
 
-{% if rules_domain %}
-  {% if rules %}
-  <table>
-    <thead>
-      <tr>
-        <th>Enabled</th>
-        <th>Type</th>
-        <th>Match field</th>
-        <th>Pattern</th>
-        <th>Action</th>
-        <th>Priority</th>
-        <th>Note</th>
-        <th>Last modified</th>
-        <th>Admin PIN</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for rule in rules %}
-      <form id="rule_form_{{ rule.id }}" method="post" action="/admin/rules/{{ rule.id }}"></form>
-      <tr>
-        <td>
-          <input form="rule_form_{{ rule.id }}" type="hidden" name="enabled" value="0" />
-          <input
-            form="rule_form_{{ rule.id }}"
-            type="checkbox"
-            name="enabled"
-            value="1"
-            {% if rule.enabled %}checked{% endif %}
-          />
-        </td>
-        <td>
-          <select form="rule_form_{{ rule.id }}" name="rule_type">
-            {% for rule_type in rule_types %}
-            <option value="{{ rule_type }}" {% if rule.rule_type == rule_type %}selected{% endif %}>
-              {{ rule_type }}
-            </option>
+  <section class="section">
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Address/content rules</h2>
+        <p class="card__subtitle">Manage allow/block rules for a domain. Changes apply only to new ingests.</p>
+      </div>
+      <div class="card__body">
+        <form method="get" action="/admin/settings" class="form">
+          <div class="form__grid">
+            <div class="field">
+              <label class="field__label" for="rules_domain">Domain</label>
+              <input class="field__control input" id="rules_domain" name="rules_domain" type="text" value="{{ rules_domain or '' }}" />
+            </div>
+          </div>
+          <div class="card__actions">
+            <button class="button round btn" type="submit">Load</button>
+          </div>
+        </form>
+
+        {% if rules_domain %}
+          {% if rules %}
+          <table class="table admin-table">
+            <thead>
+              <tr>
+                <th>Enabled</th>
+                <th>Type</th>
+                <th>Match field</th>
+                <th>Pattern</th>
+                <th>Action</th>
+                <th>Priority</th>
+                <th>Note</th>
+                <th>Last modified</th>
+                <th>Admin PIN</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for rule in rules %}
+              <form id="rule_form_{{ rule.id }}" method="post" action="/admin/rules/{{ rule.id }}"></form>
+              <tr>
+                <td>
+                  <input form="rule_form_{{ rule.id }}" type="hidden" name="enabled" value="0" />
+                  <input
+                    form="rule_form_{{ rule.id }}"
+                    type="checkbox"
+                    name="enabled"
+                    value="1"
+                    {% if rule.enabled %}checked{% endif %}
+                  />
+                </td>
+                <td>
+                  <select class="select" form="rule_form_{{ rule.id }}" name="rule_type">
+                    {% for rule_type in rule_types %}
+                    <option value="{{ rule_type }}" {% if rule.rule_type == rule_type %}selected{% endif %}>
+                      {{ rule_type }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <select class="select" form="rule_form_{{ rule.id }}" name="match_field">
+                    {% for field in match_fields %}
+                    <option value="{{ field }}" {% if rule.match_field == field %}selected{% endif %}>
+                      {{ field }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <input class="input" form="rule_form_{{ rule.id }}" name="pattern" type="text" value="{{ rule.pattern }}" />
+                </td>
+                <td>
+                  <select class="select" form="rule_form_{{ rule.id }}" name="action">
+                    {% for action in rule_actions %}
+                    <option value="{{ action }}" {% if rule.action == action %}selected{% endif %}>
+                      {{ action }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    class="input"
+                    form="rule_form_{{ rule.id }}"
+                    name="priority"
+                    type="number"
+                    min="0"
+                    value="{{ rule.priority }}"
+                  />
+                </td>
+                <td>
+                  <input class="input" form="rule_form_{{ rule.id }}" name="note" type="text" value="{{ rule.note or '' }}" />
+                </td>
+                <td>{{ rule.updated_at }}</td>
+                <td>
+                  <input
+                    class="input"
+                    form="rule_form_{{ rule.id }}"
+                    name="admin_pin"
+                    type="password"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    minlength="4"
+                    maxlength="9"
+                  />
+                </td>
+                <td class="table-actions">
+                  <button class="button round btn" form="rule_form_{{ rule.id }}" type="submit">Save</button>
+                  <button
+                    class="button secondary round btn"
+                    form="rule_form_{{ rule.id }}"
+                    type="submit"
+                    formaction="/admin/rules/{{ rule.id }}/delete"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
             {% endfor %}
-          </select>
-        </td>
-        <td>
-          <select form="rule_form_{{ rule.id }}" name="match_field">
-            {% for field in match_fields %}
-            <option value="{{ field }}" {% if rule.match_field == field %}selected{% endif %}>
-              {{ field }}
-            </option>
+            </tbody>
+          </table>
+          {% else %}
+          <p>No rules found for {{ rules_domain }}.</p>
+          {% endif %}
+
+          <div class="form-split">
+            <div class="card admin-subcard">
+              <div class="card__header">
+                <h3 class="card__title">Add rule</h3>
+              </div>
+              <div class="card__body">
+                <form method="post" action="/admin/rules" class="form">
+                  <input type="hidden" name="domain" value="{{ rules_domain }}" />
+                  <div class="form__grid">
+                    <div class="field">
+                      <label class="field__label" for="rule_type_new">Type</label>
+                      <select class="field__control select" id="rule_type_new" name="rule_type">
+                        {% for rule_type in rule_types %}
+                        <option value="{{ rule_type }}">{{ rule_type }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="match_field_new">Match field</label>
+                      <select class="field__control select" id="match_field_new" name="match_field">
+                        {% for field in match_fields %}
+                        <option value="{{ field }}">{{ field }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="pattern_new">Pattern</label>
+                      <input class="field__control input" id="pattern_new" name="pattern" type="text" />
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="action_new">Action</label>
+                      <select class="field__control select" id="action_new" name="action">
+                        {% for action in rule_actions %}
+                        <option value="{{ action }}">{{ action }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="priority_new">Priority</label>
+                      <input class="field__control input" id="priority_new" name="priority" type="number" min="0" value="0" />
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="note_new">Note</label>
+                      <input class="field__control input" id="note_new" name="note" type="text" />
+                    </div>
+                    <div class="checkrow">
+                      <input type="hidden" name="enabled" value="0" />
+                      <input id="enabled_new" name="enabled" type="checkbox" value="1" checked />
+                      <label class="checkrow__label" for="enabled_new">Enabled</label>
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="admin_pin_new">Admin PIN</label>
+                      <input
+                        class="field__control input"
+                        id="admin_pin_new"
+                        name="admin_pin"
+                        type="password"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        minlength="4"
+                        maxlength="9"
+                      />
+                    </div>
+                  </div>
+                  <div class="card__actions">
+                    <button class="button round btn" type="submit">Add rule</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="card admin-subcard">
+              <div class="card__header">
+                <h3 class="card__title">Test rule</h3>
+              </div>
+              <div class="card__body">
+                <form method="post" action="/admin/rules/test" class="form">
+                  <input type="hidden" name="rules_domain" value="{{ rules_domain }}" />
+                  <div class="form__grid">
+                    <div class="field">
+                      <label class="field__label" for="test_pattern">Pattern</label>
+                      <input class="field__control input" id="test_pattern" name="pattern" type="text" />
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="test_sample">Sample input</label>
+                      <input class="field__control input" id="test_sample" name="sample" type="text" />
+                    </div>
+                    <div class="field">
+                      <label class="field__label" for="admin_pin_test">Admin PIN</label>
+                      <input
+                        class="field__control input"
+                        id="admin_pin_test"
+                        name="admin_pin"
+                        type="password"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        minlength="4"
+                        maxlength="9"
+                      />
+                    </div>
+                  </div>
+                  <div class="card__actions">
+                    <button class="button round btn" type="submit">Test pattern</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        {% else %}
+        <div class="card empty-card">
+          <div class="card__body">
+            <p>Load a domain to manage its rules.</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="section stat-grid">
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Storage usage</h2>
+      </div>
+      <ul class="stat-list">
+        <li><span>Total messages</span><strong>{{ message_count }}</strong></li>
+        <li><span>Email storage</span><strong>{{ message_bytes }}</strong></li>
+        <li><span>Attachment storage</span><strong>{{ attachment_bytes }}</strong></li>
+        <li><span>Total storage</span><strong>{{ total_bytes }}</strong></li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Ingest metrics (last 24h)</h2>
+      </div>
+      <ul class="stat-list">
+        <li><span>Inbox messages</span><strong>{{ inbox_message_count }}</strong></li>
+        <li><span>Quarantine messages</span><strong>{{ quarantine_message_count }}</strong></li>
+        <li><span>Dropped messages</span><strong>{{ dropped_message_count }}</strong></li>
+        <li><span>Ingest total</span><strong>{{ ingest_last_24h }}</strong></li>
+        <li><span>Recent ingest rate (messages/hour)</span><strong>{{ "%.2f" | format(recent_ingest_rate) }}</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Top sender domains (last 24h)</h2>
+      </div>
+      {% if top_sender_domains %}
+        <ul class="stat-list">
+        {% for entry in top_sender_domains %}
+          <li><span>{{ entry.domain }}</span><strong>{{ entry.count }}</strong></li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <div class="card__body">
+          <p>No sender domain data available yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Ingest health (recent)</h2>
+      </div>
+      {% if ingest_attempts %}
+        <table class="table admin-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Status</th>
+              <th>Recipient</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for attempt in ingest_attempts %}
+            <tr>
+              <td>{{ attempt.occurred_at }}</td>
+              <td>{{ attempt.status }}</td>
+              <td>{{ attempt.envelope_rcpt or "Unknown" }}</td>
+              <td>{{ attempt.error_summary or "OK" }}</td>
+            </tr>
             {% endfor %}
-          </select>
-        </td>
-        <td>
-          <input form="rule_form_{{ rule.id }}" name="pattern" type="text" value="{{ rule.pattern }}" />
-        </td>
-        <td>
-          <select form="rule_form_{{ rule.id }}" name="action">
-            {% for action in rule_actions %}
-            <option value="{{ action }}" {% if rule.action == action %}selected{% endif %}>
-              {{ action }}
-            </option>
-            {% endfor %}
-          </select>
-        </td>
-        <td>
-          <input
-            form="rule_form_{{ rule.id }}"
-            name="priority"
-            type="number"
-            min="0"
-            value="{{ rule.priority }}"
-          />
-        </td>
-        <td>
-          <input form="rule_form_{{ rule.id }}" name="note" type="text" value="{{ rule.note or '' }}" />
-        </td>
-        <td>{{ rule.updated_at }}</td>
-        <td>
-          <input
-            form="rule_form_{{ rule.id }}"
-            name="admin_pin"
-            type="password"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            minlength="4"
-            maxlength="9"
-          />
-        </td>
-        <td>
-          <button form="rule_form_{{ rule.id }}" type="submit">Save</button>
-          <button
-            form="rule_form_{{ rule.id }}"
-            type="submit"
-            formaction="/admin/rules/{{ rule.id }}/delete"
-          >
-            Delete
+          </tbody>
+        </table>
+      {% else %}
+        <div class="card__body">
+          <p>No ingest attempts recorded yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="card danger-card">
+      <div class="card__header">
+        <h2 class="card__title">Danger zone</h2>
+      </div>
+      <div class="card__body">
+        <form method="post" action="/admin/messages/clear">
+          <button class="button danger round btn" type="submit" onclick="return confirm('Delete all messages and attachments?')">
+            Delete all messages
           </button>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p>No rules found for {{ rules_domain }}.</p>
-  {% endif %}
-
-  <h3>Add rule</h3>
-  <form method="post" action="/admin/rules">
-    <input type="hidden" name="domain" value="{{ rules_domain }}" />
-    <div>
-      <label for="rule_type_new">Type</label>
-      <select id="rule_type_new" name="rule_type">
-        {% for rule_type in rule_types %}
-        <option value="{{ rule_type }}">{{ rule_type }}</option>
-        {% endfor %}
-      </select>
+        </form>
+      </div>
     </div>
-    <div>
-      <label for="match_field_new">Match field</label>
-      <select id="match_field_new" name="match_field">
-        {% for field in match_fields %}
-        <option value="{{ field }}">{{ field }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="pattern_new">Pattern</label>
-      <input id="pattern_new" name="pattern" type="text" />
-    </div>
-    <div>
-      <label for="action_new">Action</label>
-      <select id="action_new" name="action">
-        {% for action in rule_actions %}
-        <option value="{{ action }}">{{ action }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="priority_new">Priority</label>
-      <input id="priority_new" name="priority" type="number" min="0" value="0" />
-    </div>
-    <div>
-      <label for="note_new">Note</label>
-      <input id="note_new" name="note" type="text" />
-    </div>
-    <div>
-      <label for="enabled_new">Enabled</label>
-      <input type="hidden" name="enabled" value="0" />
-      <input id="enabled_new" name="enabled" type="checkbox" value="1" checked />
-    </div>
-    <div>
-      <label for="admin_pin_new">Admin PIN</label>
-      <input
-        id="admin_pin_new"
-        name="admin_pin"
-        type="password"
-        inputmode="numeric"
-      pattern="[0-9]*"
-        minlength="4"
-        maxlength="9"
-      />
-    </div>
-    <button type="submit">Add rule</button>
-  </form>
-
-  <h3>Test rule</h3>
-  <form method="post" action="/admin/rules/test">
-    <input type="hidden" name="rules_domain" value="{{ rules_domain }}" />
-    <div>
-      <label for="test_pattern">Pattern</label>
-      <input id="test_pattern" name="pattern" type="text" />
-    </div>
-    <div>
-      <label for="test_sample">Sample input</label>
-      <input id="test_sample" name="sample" type="text" />
-    </div>
-    <div>
-      <label for="admin_pin_test">Admin PIN</label>
-      <input
-        id="admin_pin_test"
-        name="admin_pin"
-        type="password"
-        inputmode="numeric"
-      pattern="[0-9]*"
-        minlength="4"
-        maxlength="9"
-      />
-    </div>
-    <button type="submit">Test pattern</button>
-  </form>
-{% else %}
-  <p>Load a domain to manage its rules.</p>
-{% endif %}
-
-<h2>Storage usage</h2>
-<ul>
-  <li>Total messages: {{ message_count }}</li>
-  <li>Email storage: {{ message_bytes }}</li>
-  <li>Attachment storage: {{ attachment_bytes }}</li>
-  <li>Total storage: {{ total_bytes }}</li>
-</ul>
-
-<h2>Ingest metrics (last 24h)</h2>
-<ul>
-  <li>Inbox messages: {{ inbox_message_count }}</li>
-  <li>Quarantine messages: {{ quarantine_message_count }}</li>
-  <li>Dropped messages (last 24h): {{ dropped_message_count }}</li>
-  <li>Ingest total (last 24h): {{ ingest_last_24h }}</li>
-  <li>Recent ingest rate (messages/hour): {{ "%.2f" | format(recent_ingest_rate) }}</li>
-</ul>
-<h3>Top sender domains (last 24h)</h3>
-{% if top_sender_domains %}
-  <ul>
-  {% for entry in top_sender_domains %}
-    <li>{{ entry.domain }}: {{ entry.count }}</li>
-  {% endfor %}
-  </ul>
-{% else %}
-  <p>No sender domain data available yet.</p>
-{% endif %}
-
-<h2>Ingest health (recent)</h2>
-{% if ingest_attempts %}
-  <table>
-    <thead>
-      <tr>
-        <th>Time</th>
-        <th>Status</th>
-        <th>Recipient</th>
-        <th>Details</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for attempt in ingest_attempts %}
-      <tr>
-        <td>{{ attempt.occurred_at }}</td>
-        <td>{{ attempt.status }}</td>
-        <td>{{ attempt.envelope_rcpt or "Unknown" }}</td>
-        <td>{{ attempt.error_summary or "OK" }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% else %}
-  <p>No ingest attempts recorded yet.</p>
-{% endif %}
-
-<h2>Danger zone</h2>
-<form method="post" action="/admin/messages/clear">
-  <button type="submit" onclick="return confirm('Delete all messages and attachments?')">
-    Delete all messages
-  </button>
-</form>
-<p><a href="/inbox">Back to inbox</a></p>
+  </section>
+</div>
 {% endblock %}

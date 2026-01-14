@@ -20,10 +20,10 @@
     <span class="message-details__actions">
       {% if is_admin %}
       <form method="post" action="/admin/message/{{ message.id }}/delete">
-        <button class="button secondary" type="submit">Delete</button>
+        <button class="button secondary round" type="submit">Delete</button>
       </form>
       {% endif %}
-      <a class="button secondary" href="/inbox{{ inbox_query }}">Back to Inbox</a>
+      <a class="button secondary round" href="/inbox{{ inbox_query }}">Back to Inbox</a>
     </span>
   </summary>
   <div class="details-grid compact three-col">
