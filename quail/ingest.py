@@ -404,6 +404,15 @@ def ingest(raw_bytes: bytes, envelope_rcpt: str) -> None:
         _now_iso(),
     )
 
+    db.log_inbox_event(
+        settings.db_path,
+        _now_iso(),
+        "added",
+        message_id=int(message_id),
+        envelope_rcpt=envelope_rcpt,
+        quarantined=1 if is_quarantined else 0,
+    )
+
     if status == "DROP":
         LOGGER.warning("Message dropped by ingest policy for %s.", envelope_rcpt)
     elif status == "QUARANTINE":

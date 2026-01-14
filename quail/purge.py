@@ -27,6 +27,10 @@ BATCH_SIZE = 200
 AUDIT_RETENTION_DAYS = 30
 
 
+def _now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
 def _delete_eml(eml_path: Path) -> None:
     try:
         eml_path.unlink(missing_ok=True)
@@ -57,6 +61,7 @@ def _extract_domain(envelope_rcpt: str) -> str | None:
 
 
 def _purge_inbox_messages(
+    db_path: Path,
     conn: sqlite3.Connection,
     cutoff: datetime,
     batch_size: int,
@@ -66,7 +71,7 @@ def _purge_inbox_messages(
     last_seen: tuple[str, int] | None = None
     while True:
         query = """
-            SELECT id, received_at, eml_path
+            SELECT id, received_at, envelope_rcpt, eml_path, quarantined
             FROM messages
             WHERE received_at < ?
               AND status = 'INBOX'
@@ -90,6 +95,14 @@ def _purge_inbox_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
+            db.log_inbox_event(
+                db_path,
+                _now_iso(),
+                "deleted",
+                message_id=row["id"],
+                envelope_rcpt=row["envelope_rcpt"],
+                quarantined=row["quarantined"],
+            )
             conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
             purged_messages += 1
         last_seen = (rows[-1]["received_at"], rows[-1]["id"])
@@ -98,6 +111,7 @@ def _purge_inbox_messages(
 
 
 def _purge_quarantine_messages(
+    db_path: Path,
     conn: sqlite3.Connection,
     now: datetime,
     default_retention_days: int,
@@ -145,6 +159,14 @@ def _purge_quarantine_messages(
                 _delete_attachment(Path(attachment["stored_path"]))
                 purged_attachments += 1
             _delete_eml(Path(row["eml_path"]))
+            db.log_inbox_event(
+                db_path,
+                _now_iso(),
+                "deleted",
+                message_id=row["id"],
+                envelope_rcpt=row["envelope_rcpt"],
+                quarantined=row["quarantined"],
+            )
             conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
             purged_messages += 1
             last_seen = (row["received_at"], row["id"])
@@ -162,8 +184,11 @@ def _purge_messages(
 ) -> tuple[int, int]:
     cutoff = now - timedelta(days=retention_days)
     with db.get_connection(db_path) as conn:
-        inbox_messages, inbox_attachments = _purge_inbox_messages(conn, cutoff, batch_size)
+        inbox_messages, inbox_attachments = _purge_inbox_messages(
+            db_path, conn, cutoff, batch_size
+        )
         quarantine_messages, quarantine_attachments = _purge_quarantine_messages(
+            db_path,
             conn,
             now,
             quarantine_retention_days,

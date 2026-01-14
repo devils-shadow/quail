@@ -22,6 +22,7 @@ included here.
 - `GET /api/inbox` returns the inbox list with ETag support.
 - The inbox page polls with ETag-aware fetches and re-renders on changes.
 - Admin actions and purge logic update the same message store.
+- WebSocket updates are gated by `QUAIL_ENABLE_WS=true` in `/etc/quail/config.env`.
 
 ## Proposed Architecture
 

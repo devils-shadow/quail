@@ -92,19 +92,24 @@
   const hiddenKey = "quailHiddenMessages";
   const themeStorageKey = "quailTheme";
   const pauseKey = "quailInboxPaused";
-  const refreshIntervalMs = 3000;
+  const wsEnabled = {{ "true" if enable_ws else "false" }};
+  const pollingIntervalMs = wsEnabled ? 15000 : 3000;
   const inboxQuery =
     "{% if current_inbox %}?inbox={{ current_inbox | urlencode }}{% endif %}";
   const inboxApiUrl = `/api/inbox${inboxQuery}`;
+  const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/inbox${inboxQuery}`;
   const isAdmin = {{ "true" if is_admin else "false" }};
   const tableBody = document.querySelector(".table tbody");
   let rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
   let emptyRow = document.querySelector("[data-empty-state]");
   const trashButton = document.getElementById("trash-button");
   const pauseButton = document.getElementById("pause-button");
+  let messageCache = new Map();
   let refreshTimer = null;
   let refreshInFlight = false;
   let lastEtag = null;
+  let ws = null;
 
   const resetRows = () => {
     rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
@@ -234,6 +239,50 @@
     return row;
   };
 
+  const renderMessagesFromCache = () => {
+    const messages = Array.from(messageCache.values());
+    messages.sort((a, b) => {
+      const aTime = new Date(a.received_at || 0).getTime();
+      const bTime = new Date(b.received_at || 0).getTime();
+      return bTime - aTime;
+    });
+    renderMessages(messages);
+  };
+
+  const setCache = (messages) => {
+    messageCache = new Map();
+    messages.forEach((message) => {
+      messageCache.set(String(message.id), message);
+    });
+    renderMessagesFromCache();
+  };
+
+  const applyDelta = (payload) => {
+    let changed = false;
+    if (Array.isArray(payload.added)) {
+      payload.added.forEach((message) => {
+        messageCache.set(String(message.id), message);
+        changed = true;
+      });
+    }
+    if (Array.isArray(payload.updated)) {
+      payload.updated.forEach((message) => {
+        messageCache.set(String(message.id), message);
+        changed = true;
+      });
+    }
+    if (Array.isArray(payload.deleted)) {
+      payload.deleted.forEach((id) => {
+        if (messageCache.delete(String(id))) {
+          changed = true;
+        }
+      });
+    }
+    if (changed) {
+      renderMessagesFromCache();
+    }
+  };
+
   const renderMessages = (messages) => {
     if (!tableBody) {
       return;
@@ -248,6 +297,7 @@
     tableBody.replaceChildren(fragment);
     resetRows();
     applyHidden();
+    applyReceivedFormatting();
   };
 
   const pad2 = (value) => String(value).padStart(2, "0");
@@ -377,13 +427,79 @@
         return;
       }
       if (!hasSameMessages(payload.messages)) {
-        renderMessages(payload.messages);
+        setCache(payload.messages);
       }
     } catch (error) {
       // Ignore refresh errors.
     } finally {
       refreshInFlight = false;
     }
+  };
+
+  const startPolling = () => {
+    if (refreshTimer || pollingIntervalMs <= 0) {
+      return;
+    }
+    refreshTimer = window.setInterval(refreshInbox, pollingIntervalMs);
+  };
+
+  const stopPolling = () => {
+    if (!refreshTimer) {
+      return;
+    }
+    window.clearInterval(refreshTimer);
+    refreshTimer = null;
+  };
+
+  const handleWsMessage = (event) => {
+    if (isPaused()) {
+      return;
+    }
+    let payload = null;
+    try {
+      payload = JSON.parse(event.data);
+    } catch (error) {
+      return;
+    }
+    if (!payload || typeof payload.type !== "string") {
+      return;
+    }
+    if (payload.type === "snapshot") {
+      if (Array.isArray(payload.messages)) {
+        setCache(payload.messages);
+      }
+      if (payload.etag) {
+        lastEtag = payload.etag;
+      }
+      return;
+    }
+    if (payload.type === "delta") {
+      applyDelta(payload);
+      if (payload.etag) {
+        lastEtag = payload.etag;
+      }
+      return;
+    }
+  };
+
+  const startWebSocket = () => {
+    if (!wsEnabled || ws) {
+      return;
+    }
+    ws = new WebSocket(wsUrl);
+    ws.addEventListener("open", () => {
+      stopPolling();
+    });
+    ws.addEventListener("message", handleWsMessage);
+    ws.addEventListener("close", () => {
+      ws = null;
+      startPolling();
+    });
+    ws.addEventListener("error", () => {
+      if (ws) {
+        ws.close();
+      }
+    });
   };
 
   const updatePauseButton = () => {
@@ -467,8 +583,10 @@
     updatePauseButton();
   }
 
-  if (refreshIntervalMs > 0) {
-    refreshTimer = window.setInterval(refreshInbox, refreshIntervalMs);
+  if (wsEnabled) {
+    startWebSocket();
+  } else {
+    startPolling();
   }
 
   applyHidden();

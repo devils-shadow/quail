@@ -110,6 +110,16 @@ SCHEMA = [
         error_summary TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS inbox_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        message_id INTEGER,
+        envelope_rcpt TEXT,
+        quarantined INTEGER NOT NULL DEFAULT 0
+    )
+    """,
 ]
 
 
@@ -290,6 +300,50 @@ def list_ingest_attempts(db_path: Path, limit: int = 20) -> Iterable[sqlite3.Row
             """,
             (limit,),
         )
+
+
+def log_inbox_event(
+    db_path: Path,
+    occurred_at: str,
+    event_type: str,
+    message_id: int | None = None,
+    envelope_rcpt: str | None = None,
+    quarantined: int = 0,
+) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO inbox_events (
+                occurred_at,
+                event_type,
+                message_id,
+                envelope_rcpt,
+                quarantined
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (occurred_at, event_type, message_id, envelope_rcpt, quarantined),
+        )
+        conn.commit()
+
+
+def list_inbox_events(db_path: Path, since_id: int, limit: int = 100) -> Iterable[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        yield from conn.execute(
+            """
+            SELECT id, event_type, message_id, envelope_rcpt, quarantined
+            FROM inbox_events
+            WHERE id > ?
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (since_id, limit),
+        )
+
+
+def get_last_inbox_event_id(db_path: Path) -> int:
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT COALESCE(MAX(id), 0) AS last_id FROM inbox_events").fetchone()
+        return int(row["last_id"] or 0)
 
 
 def get_rate_limit_state(db_path: Path, source_ip: str) -> sqlite3.Row | None:

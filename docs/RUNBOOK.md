@@ -31,6 +31,12 @@ This runbook provides step‑by‑step instructions for installing, configuring,
 See `docs/MODES.md` for VPN VM mode vs reverse-proxy mode guidance and the
 `scripts/quail-mode` helper for switching bind hosts safely.
 
+### WebSocket inbox
+
+Enable WebSocket inbox updates by setting `QUAIL_ENABLE_WS=true` in
+`/etc/quail/config.env`. When disabled, the inbox uses the existing polling
+behavior.
+
 ## Upgrade
 
 To upgrade Quail to a newer version:
