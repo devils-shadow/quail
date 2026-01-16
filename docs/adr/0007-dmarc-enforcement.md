@@ -13,6 +13,11 @@ Implement DMARC evaluation during ingest. Messages that fail DMARC are
 quarantined, not dropped. DMARC results are stored with message metadata and
 exposed to admins.
 
+Operational clarifications:
+- DNS failures/timeouts are treated as DMARC failures (quarantine).
+- Admins can configure a domain allowlist that bypasses DMARC enforcement for
+  trusted senders; bypassed results are still recorded in message metadata.
+
 ## Consequences
 
 - Adds DNS and policy evaluation to the ingest pipeline.
