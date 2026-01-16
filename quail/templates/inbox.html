@@ -1,8 +1,12 @@
 {% extends "layout.html" %}
+{% set body_class = "list-view inbox-view" %}
 {% block content %}
 <div class="list-page">
   <div class="page-header">
-    <h1 class="page-title">Public Messages</h1>
+    <div>
+      <h1 class="page-title">Received Mail</h1>
+      <p class="page-subtitle">Ephemeral mail for testing and development.</p>
+    </div>
     <div class="toolbar">
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
         <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
@@ -11,11 +15,11 @@
       </button>
       <form method="get" action="/inbox">
         <input
-          class="input round"
+          class="input round input--filter"
           type="text"
           name="inbox"
           value="{{ current_inbox | default('') }}"
-          placeholder="Filter inbox (e.g. test or hamara*)"
+          placeholder="Filter inbox (e.g. test123, test*)"
         />
         <button class="button square round" type="submit">
           <span class="button-label">GO</span>
@@ -30,72 +34,90 @@
     </div>
   </div>
 
-  <div class="list-scroll">
-    <div class="card list-scroll-card list-scroll-card--inbox">
-      <div class="list-scroll-head">
-        <table class="table inbox-table inbox-table--head">
-          <thead>
-            <tr>
-              <th class="from-col">From</th>
-              <th class="to-col">To</th>
-              <th class="subject-col">Subject</th>
-              <th class="received-col">Received</th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-      <div class="list-scroll-body">
-        <table class="table inbox-table inbox-table--body">
-          <tbody>
-            {% if messages %}
-            {% set inbox_query = "" %}
-            {% if current_inbox %}
-            {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
-            {% endif %}
-            {% for message in messages %}
-            {% set from_display = message.from_addr or "Unknown" %}
-            {% if "<" in from_display %}
-            {% set from_display = from_display.split("<")[0].strip().strip('"') %}
-            {% elif "@" in from_display %}
-            {% set from_display = from_display.split("@")[0] %}
-            {% endif %}
-            {% set to_display = message.envelope_rcpt or "" %}
-            {% if "@" in to_display %}
-            {% set to_display = to_display.split("@")[0] %}
-            {% endif %}
-            <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
-              <td class="from-col">
-                <input class="message-select" type="checkbox" aria-label="Select message" />
-                <span class="from-text">{{ from_display }}</span>
-                {% if is_admin and message.quarantined %}
-                <span class="badge">Quarantined</span>
-                {% endif %}
-              </td>
-              <td class="to-col">{{ to_display }}</td>
-              <td class="subject-col">
-                <a href="/message/{{ message.id }}{{ inbox_query }}">
-                  {{ message.subject or "(No subject)" }}
-                </a>
-              </td>
-              <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
-                {{ message.received_at }}
-              </td>
-            </tr>
-            {% endfor %}
-            <tr data-empty-state style="display: none;">
-              <td colspan="3">
-                <div class="empty-state">This inbox is currently empty.</div>
-              </td>
-            </tr>
-            {% else %}
-            <tr data-empty-state>
-              <td colspan="3">
-                <div class="empty-state">This inbox is currently empty.</div>
-              </td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
+  <div class="list-body">
+    <div class="list-scroll">
+      <div class="card list-scroll-card list-scroll-card--inbox">
+        <div class="list-scroll-head">
+          <table class="table inbox-table inbox-table--head">
+            <thead>
+              <tr>
+                <th class="from-col">From</th>
+                <th class="to-col">To</th>
+                <th class="subject-col">Subject</th>
+                <th class="received-col">Received</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div class="list-scroll-body">
+          <table class="table inbox-table inbox-table--body">
+            <tbody>
+              {% if messages %}
+              {% set inbox_query = "" %}
+              {% if current_inbox %}
+              {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
+              {% endif %}
+              {% for message in messages %}
+              {% set from_display = message.from_addr or "Unknown" %}
+              {% if "<" in from_display %}
+              {% set from_display = from_display.split("<")[0].strip().strip('"') %}
+              {% elif "@" in from_display %}
+              {% set from_display = from_display.split("@")[0] %}
+              {% endif %}
+              {% set to_display = message.envelope_rcpt or "" %}
+              {% if "@" in to_display %}
+              {% set to_display = to_display.split("@")[0] %}
+              {% endif %}
+              <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
+                <td class="from-col">
+                  <input class="message-select" type="checkbox" aria-label="Select message" />
+                  <span class="from-text">{{ from_display }}</span>
+                  {% if is_admin and message.quarantined %}
+                  <span class="badge">Quarantined</span>
+                  {% endif %}
+                </td>
+                <td class="to-col">{{ to_display }}</td>
+                <td class="subject-col">
+                  <a href="/message/{{ message.id }}{{ inbox_query }}">
+                    {{ message.subject or "(No subject)" }}
+                  </a>
+                </td>
+                <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
+                  {{ message.received_at }}
+                </td>
+              </tr>
+              {% endfor %}
+              <tr data-empty-state style="display: none;">
+                <td colspan="3">
+                  <div class="empty-state">
+                    {% if current_inbox %}
+                    <div><strong>Currently filtered inbox has no mail.</strong></div>
+                    <div class="row-muted" aria-hidden="true">&nbsp;</div>
+                    {% else %}
+                    <div><strong>This is an ephemeral inbox.</strong></div>
+                    <div class="row-muted">Messages are only shown after you apply a filter.</div>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr data-empty-state>
+                <td colspan="3">
+                  <div class="empty-state">
+                    {% if current_inbox %}
+                    <div><strong>Currently filtered inbox has no mail.</strong></div>
+                    <div class="row-muted" aria-hidden="true">&nbsp;</div>
+                    {% else %}
+                    <div><strong>This is an ephemeral inbox.</strong></div>
+                    <div class="row-muted">Messages are only shown after you apply a filter.</div>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -106,6 +128,7 @@
   const pauseKey = "quailInboxPaused";
   const wsEnabled = {{ "true" if enable_ws else "false" }};
   const pollingIntervalMs = wsEnabled ? 15000 : 3000;
+  const hasFilter = {{ "true" if current_inbox else "false" }};
   const inboxQuery =
     "{% if current_inbox %}?inbox={{ current_inbox | urlencode }}{% endif %}";
   const inboxApiUrl = `/api/inbox${inboxQuery}`;
@@ -174,7 +197,22 @@
     cell.colSpan = 4;
     const emptyState = document.createElement("div");
     emptyState.className = "empty-state";
-    emptyState.textContent = "This inbox is currently empty.";
+    const title = document.createElement("div");
+    const titleStrong = document.createElement("strong");
+    titleStrong.textContent = hasFilter
+      ? "Currently filtered inbox has no mail."
+      : "This is an ephemeral inbox.";
+    title.appendChild(titleStrong);
+    emptyState.appendChild(title);
+    const detail = document.createElement("div");
+    detail.className = "row-muted";
+    if (hasFilter) {
+      detail.setAttribute("aria-hidden", "true");
+      detail.textContent = "\u00a0";
+    } else {
+      detail.textContent = "Messages are only shown after you apply a filter.";
+    }
+    emptyState.appendChild(detail);
     cell.appendChild(emptyState);
     row.appendChild(cell);
     return row;

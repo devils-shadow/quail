@@ -44,6 +44,18 @@
         --radius: 14px;
         --sidebar-width: 240px;
         --admin-col: minmax(240px, 320px);
+        --page-header-top: 24px;
+        --page-header-gap: 24px;
+        --page-title-line: 34px;
+        --page-subtitle-line: 18px;
+        --page-subtitle-gap: 6px;
+        --page-header-row-height: calc(
+          var(--page-header-top) +
+          var(--page-title-line) +
+          var(--page-subtitle-gap) +
+          var(--page-subtitle-line) +
+          var(--page-header-gap)
+        );
       }
 
       [data-theme="dark"] {
@@ -95,14 +107,32 @@
         width: var(--sidebar-width);
         background: var(--sidebar-bg);
         border-right: 1px solid var(--border);
-        padding: 32px 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
+        padding: 0;
+        display: grid;
+        grid-template-rows: var(--page-header-row-height) 1fr;
+        gap: 0;
         position: sticky;
         top: 0;
         align-self: flex-start;
         height: 100vh;
+      }
+      
+      .sidebar-top,
+      .sidebar-bottom {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .sidebar-top {
+        grid-row: 1;
+        padding: 24px 18px 12px;
+        gap: 12px;
+      }
+
+      .sidebar-bottom {
+        grid-row: 2;
+        padding: 0 18px 32px;
       }
 
       .sidebar-title {
@@ -169,6 +199,33 @@
         background: var(--sidebar-card);
         font-weight: 600;
         color: var(--text);
+      }
+
+      .sidebar-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 600;
+        line-height: 1;
+        margin-bottom: 6px;
+      }
+
+      .sidebar-brand:hover {
+        color: var(--text);
+      }
+
+      .sidebar-brand__logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        flex-shrink: 0;
+      }
+
+      .sidebar-brand__text {
+        font-size: 24px;
+        letter-spacing: 0.02em;
       }
 
       .sidebar-settings::before {
@@ -308,12 +365,54 @@
         position: static;
       }
 
+      body.inbox-view .app-shell {
+        display: grid;
+        grid-template-columns: var(--sidebar-width) 1fr;
+        grid-template-rows: var(--page-header-row-height) 1fr;
+        height: 100vh;
+      }
+
+      body.inbox-view .sidebar {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        align-self: stretch;
+      }
+
+      body.inbox-view .main-content {
+        display: contents;
+      }
+
+      body.inbox-view .list-page {
+        display: contents;
+      }
+
+      body.inbox-view .page-header {
+        grid-column: 2;
+        grid-row: 1;
+        padding: var(--page-header-top) 40px 0;
+        margin-bottom: var(--page-header-gap);
+      }
+
+      body.inbox-view .list-body {
+        grid-column: 2;
+        grid-row: 2;
+        padding: 0 40px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      body.inbox-view .list-body .list-scroll {
+        width: 100%;
+        flex: 0 0 auto;
+      }
+
       .page-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 24px;
-        margin-bottom: 24px;
+        margin-bottom: var(--page-header-gap);
       }
 
       .admin-unlock-page {
@@ -374,6 +473,7 @@
 
       .page-title {
         font-size: 30px;
+        line-height: var(--page-title-line);
         margin: 0;
       }
 
@@ -390,9 +490,10 @@
       }
 
       .page-subtitle {
-        margin: 6px 0 0;
+        margin: var(--page-subtitle-gap) 0 0;
         color: var(--muted);
         font-size: 14px;
+        line-height: var(--page-subtitle-line);
       }
 
       .admin-page {
@@ -425,6 +526,19 @@
 
       .input.round {
         border-radius: 999px;
+      }
+
+      .input--filter {
+        text-align: left;
+      }
+
+      .input--filter::placeholder {
+        text-align: center;
+      }
+
+      .input--filter:focus::placeholder {
+        text-align: left;
+        color: transparent;
       }
 
       .select {
@@ -1248,8 +1362,17 @@
 
         .sidebar {
           width: 100%;
+          display: flex;
           flex-direction: row;
           flex-wrap: wrap;
+          padding: 24px 18px;
+          gap: 12px;
+          height: auto;
+        }
+
+        .sidebar-top,
+        .sidebar-bottom {
+          padding: 0;
         }
 
         .main-content {
@@ -1265,6 +1388,28 @@
           width: 100%;
           justify-content: flex-start;
         }
+
+        body.inbox-view .app-shell {
+          display: flex;
+          flex-direction: column;
+        }
+
+        body.inbox-view .main-content {
+          display: block;
+          padding: 24px;
+        }
+
+        body.inbox-view .list-page {
+          display: block;
+        }
+
+        body.inbox-view .page-header {
+          padding: 0;
+        }
+
+        body.inbox-view .list-body {
+          padding: 0 0 24px;
+        }
       }
     </style>
   </head>
@@ -1275,14 +1420,27 @@
     <div class="app-shell">
       {% if show_sidebar | default(true) %}
       <aside class="sidebar">
-        <a class="sidebar-settings" href="/admin/unlock">Settings</a>
-        <div class="sidebar-card">
-          <div class="sidebar-title">
-            <span>✉️</span>
-            Recent Inboxes
+        <div class="sidebar-top">
+          <a class="sidebar-brand" href="/">
+            <img
+              class="sidebar-brand__logo"
+              src="/static/android-chrome-192x192.png"
+              srcset="/static/android-chrome-192x192.png 1x"
+              alt="Quail"
+            />
+            <span class="sidebar-brand__text">Quail</span>
+          </a>
+        </div>
+        <div class="sidebar-bottom">
+          <a class="sidebar-settings" href="/admin/unlock">Settings</a>
+          <div class="sidebar-card">
+            <div class="sidebar-title">
+              <span>✉️</span>
+              Recent Inboxes
+            </div>
+            <ul class="sidebar-list" id="recent-inboxes"></ul>
+            <p class="sidebar-empty" id="recent-inboxes-empty">No recent filters yet.</p>
           </div>
-          <ul class="sidebar-list" id="recent-inboxes"></ul>
-          <p class="sidebar-empty" id="recent-inboxes-empty">No recent filters yet.</p>
         </div>
       </aside>
       {% endif %}
