@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file. This projec
 
 - install.sh now initializes the admin PIN from `QUAIL_ADMIN_PIN` when unset.
 - upgrade.sh can reset the admin PIN when `QUAIL_RESET_PIN=true`.
+- Admin UI now requires CSRF tokens for state-changing requests.
+- Admin session cookies are marked Secure when HTTPS is detected (including `X-Forwarded-Proto`).
+- WebSocket inbox loop retries after unexpected errors to keep live updates running.
+- Attachment downloads now return 404 when files are missing on disk.
+- Docs clarify that HTML is rendered as sent inside a sandboxed iframe (no sanitization).
 
 ## [0.3.0] - 2026-01-13
 
