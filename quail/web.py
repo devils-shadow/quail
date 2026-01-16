@@ -1209,6 +1209,7 @@ async def inbox(request: Request) -> HTMLResponse:
             "is_admin": is_admin,
             "current_inbox": inbox_filter or "",
             "enable_ws": ENABLE_WS,
+            "body_class": "list-view",
         },
     )
 
@@ -1941,6 +1942,7 @@ async def admin_quarantine(request: Request) -> HTMLResponse:
             "end_date_filter": request.query_params.get("end_date") or "",
             "match_fields": MATCH_FIELDS,
             "csrf_token": csrf_token,
+            "body_class": "list-view",
         },
     )
     _set_csrf_cookie(response, request, csrf_token)

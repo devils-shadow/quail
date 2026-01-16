@@ -236,6 +236,46 @@
         min-height: 0;
       }
 
+      body.list-view {
+        overflow: hidden;
+      }
+
+      body.list-view .app-shell {
+        height: 100vh;
+      }
+
+      body.list-view .main-content {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 24px;
+      }
+
+      body.list-view .list-page {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      body.list-view .list-form {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      body.list-view .list-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      body.list-view .list-scroll .card {
+        margin-bottom: 0;
+      }
+
       .page-header {
         display: flex;
         align-items: center;

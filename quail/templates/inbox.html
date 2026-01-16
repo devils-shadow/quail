@@ -1,94 +1,98 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">Public Messages</h1>
-  <div class="toolbar">
-    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
-      <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
-      <span class="theme-toggle__thumb" aria-hidden="true"></span>
-      <span class="theme-toggle__icon theme-toggle__icon--moon">🌚</span>
-    </button>
-    <form method="get" action="/inbox">
-      <input
-        class="input round"
-        type="text"
-        name="inbox"
-        value="{{ current_inbox | default('') }}"
-        placeholder="Filter inbox (e.g. test or hamara*)"
-      />
-      <button class="button square round" type="submit">
-        <span class="button-label">GO</span>
+<div class="list-page">
+  <div class="page-header">
+    <h1 class="page-title">Public Messages</h1>
+    <div class="toolbar">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
+        <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
+        <span class="theme-toggle__thumb" aria-hidden="true"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon">🌚</span>
       </button>
-    </form>
-    <button class="button secondary icon round" id="trash-button" type="button" aria-label="Delete messages">
-      🗑️
-    </button>
-    <button class="button secondary icon round" id="pause-button" type="button" aria-label="Pause refresh">
-      ⏸️
-    </button>
+      <form method="get" action="/inbox">
+        <input
+          class="input round"
+          type="text"
+          name="inbox"
+          value="{{ current_inbox | default('') }}"
+          placeholder="Filter inbox (e.g. test or hamara*)"
+        />
+        <button class="button square round" type="submit">
+          <span class="button-label">GO</span>
+        </button>
+      </form>
+      <button class="button secondary icon round" id="trash-button" type="button" aria-label="Delete messages">
+        🗑️
+      </button>
+      <button class="button secondary icon round" id="pause-button" type="button" aria-label="Pause refresh">
+        ⏸️
+      </button>
+    </div>
   </div>
-</div>
 
-<div class="card">
-  <table class="table inbox-table">
-    <thead>
-      <tr>
-        <th class="from-col">From</th>
-        <th class="to-col">To</th>
-        <th class="subject-col">Subject</th>
-        <th class="received-col">Received</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if messages %}
-      {% set inbox_query = "" %}
-      {% if current_inbox %}
-      {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
-      {% endif %}
-      {% for message in messages %}
-      {% set from_display = message.from_addr or "Unknown" %}
-      {% if "<" in from_display %}
-      {% set from_display = from_display.split("<")[0].strip().strip('"') %}
-      {% elif "@" in from_display %}
-      {% set from_display = from_display.split("@")[0] %}
-      {% endif %}
-      {% set to_display = message.envelope_rcpt or "" %}
-      {% if "@" in to_display %}
-      {% set to_display = to_display.split("@")[0] %}
-      {% endif %}
-      <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
-        <td class="from-col">
-          <input class="message-select" type="checkbox" aria-label="Select message" />
-          <span class="from-text">{{ from_display }}</span>
-          {% if is_admin and message.quarantined %}
-          <span class="badge">Quarantined</span>
+  <div class="list-scroll">
+    <div class="card">
+      <table class="table inbox-table">
+        <thead>
+          <tr>
+            <th class="from-col">From</th>
+            <th class="to-col">To</th>
+            <th class="subject-col">Subject</th>
+            <th class="received-col">Received</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if messages %}
+          {% set inbox_query = "" %}
+          {% if current_inbox %}
+          {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
           {% endif %}
-        </td>
-        <td class="to-col">{{ to_display }}</td>
-        <td class="subject-col">
-          <a href="/message/{{ message.id }}{{ inbox_query }}">
-            {{ message.subject or "(No subject)" }}
-          </a>
-        </td>
-        <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
-          {{ message.received_at }}
-        </td>
-      </tr>
-      {% endfor %}
-      <tr data-empty-state style="display: none;">
-        <td colspan="3">
-          <div class="empty-state">This inbox is currently empty.</div>
-        </td>
-      </tr>
-      {% else %}
-      <tr data-empty-state>
-        <td colspan="3">
-          <div class="empty-state">This inbox is currently empty.</div>
-        </td>
-      </tr>
-      {% endif %}
-    </tbody>
-  </table>
+          {% for message in messages %}
+          {% set from_display = message.from_addr or "Unknown" %}
+          {% if "<" in from_display %}
+          {% set from_display = from_display.split("<")[0].strip().strip('"') %}
+          {% elif "@" in from_display %}
+          {% set from_display = from_display.split("@")[0] %}
+          {% endif %}
+          {% set to_display = message.envelope_rcpt or "" %}
+          {% if "@" in to_display %}
+          {% set to_display = to_display.split("@")[0] %}
+          {% endif %}
+          <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
+            <td class="from-col">
+              <input class="message-select" type="checkbox" aria-label="Select message" />
+              <span class="from-text">{{ from_display }}</span>
+              {% if is_admin and message.quarantined %}
+              <span class="badge">Quarantined</span>
+              {% endif %}
+            </td>
+            <td class="to-col">{{ to_display }}</td>
+            <td class="subject-col">
+              <a href="/message/{{ message.id }}{{ inbox_query }}">
+                {{ message.subject or "(No subject)" }}
+              </a>
+            </td>
+            <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
+              {{ message.received_at }}
+            </td>
+          </tr>
+          {% endfor %}
+          <tr data-empty-state style="display: none;">
+            <td colspan="3">
+              <div class="empty-state">This inbox is currently empty.</div>
+            </td>
+          </tr>
+          {% else %}
+          <tr data-empty-state>
+            <td colspan="3">
+              <div class="empty-state">This inbox is currently empty.</div>
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 <script>
   const hiddenKey = "quailHiddenMessages";
