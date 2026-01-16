@@ -1310,6 +1310,11 @@
         cursor: pointer;
       }
 
+      .theme-toggle:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
       .theme-toggle__icon {
         position: absolute;
         top: 50%;
@@ -1348,6 +1353,14 @@
       }
 
       [data-theme="dark"] .theme-toggle__thumb {
+        transform: translateX(12px);
+      }
+
+      .notify-toggle .theme-toggle__thumb {
+        transform: translateX(-12px);
+      }
+
+      .notify-toggle.is-on .theme-toggle__thumb {
         transform: translateX(12px);
       }
 

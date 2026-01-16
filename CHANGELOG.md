@@ -11,6 +11,10 @@ All notable changes to this project will be documented in this file. This projec
 - WebSocket inbox loop retries after unexpected errors to keep live updates running.
 - Attachment downloads now return 404 when files are missing on disk.
 - Docs clarify that HTML is rendered as sent inside a sandboxed iframe (no sanitization).
+- Inbox list pages now use internal scrolling with sticky headers and aligned list layouts.
+- Inbox copy updated (Received Mail title, QA subtitle, filter placeholder) with new empty-state messaging.
+- Inbox UI adds a desktop notifications toggle plus dynamic tab titles for new mail and reconnecting.
+- WebSocket inbox adds app-level ping/pong keepalive with jittered reconnect backoff.
 
 ## [0.3.0] - 2026-01-13
 

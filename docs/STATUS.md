@@ -6,10 +6,12 @@
 
 ## Overview
 
-Quail is in active internal use with a complete inbox UI, admin workflows, and
-ingest/purge automation. HTML rendering is available via a sandboxed iframe,
-quarantine management is live, and retention policies are configurable.
-WebSocket inbox updates are enabled by default with polling fallback.
+Quail is in active internal use with a complete inbox UI (internal list scroll
+with sticky headers, empty states, and optional desktop notifications),
+admin workflows, and ingest/purge automation. HTML rendering is available via a
+sandboxed iframe, quarantine management is live, and retention policies are
+configurable. WebSocket inbox updates are enabled by default with app-level
+ping/pong keepalive and polling fallback.
 
 ## Known Issues
 

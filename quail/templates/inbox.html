@@ -13,6 +13,16 @@
         <span class="theme-toggle__thumb" aria-hidden="true"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon">🌚</span>
       </button>
+      <span
+        class="tooltip-label"
+        data-tip="Desktop notifications for new emails (requires browser permission)."
+      >
+        <button class="theme-toggle notify-toggle" id="notify-toggle" type="button" aria-label="Toggle notifications">
+          <span class="theme-toggle__icon theme-toggle__icon--sun">🔕</span>
+          <span class="theme-toggle__thumb" aria-hidden="true"></span>
+          <span class="theme-toggle__icon theme-toggle__icon--moon">🔔</span>
+        </button>
+      </span>
       <form method="get" action="/inbox">
         <input
           class="input round input--filter"
@@ -126,9 +136,14 @@
   const hiddenKey = "quailHiddenMessages";
   const themeStorageKey = "quailTheme";
   const pauseKey = "quailInboxPaused";
+  const notifyKey = "quailInboxNotify";
   const wsEnabled = {{ "true" if enable_ws else "false" }};
   const pollingIntervalMs = wsEnabled ? 15000 : 3000;
+  const wsHeartbeatIntervalMs = 30000;
+  const wsHeartbeatMaxSilenceMs = 65000;
   const hasFilter = {{ "true" if current_inbox else "false" }};
+  const currentInboxLabel = {{ current_inbox | tojson }};
+  const baseTitle = document.title;
   const inboxQuery =
     "{% if current_inbox %}?inbox={{ current_inbox | urlencode }}{% endif %}";
   const inboxApiUrl = `/api/inbox${inboxQuery}`;
@@ -142,11 +157,22 @@
   const pauseButton = document.getElementById("pause-button");
   let messageCache = new Map();
   let refreshTimer = null;
+  let refreshIntervalMs = pollingIntervalMs;
   let refreshInFlight = false;
   let lastEtag = null;
   let ws = null;
   let wsRetryMs = 1000;
   let wsRetryTimer = null;
+  let wsHeartbeatTimer = null;
+  let lastWsActivityAt = 0;
+  let reconnecting = false;
+  let reconnectingDots = ".";
+  let reconnectingTimer = null;
+  let hiddenBaselineIds = new Set();
+  let unseenIds = new Set();
+  let lastNotifiedCount = 0;
+  let lastNotifiedAt = 0;
+  const notifyCooldownMs = 5000;
 
   const resetRows = () => {
     rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
@@ -216,6 +242,161 @@
     cell.appendChild(emptyState);
     row.appendChild(cell);
     return row;
+  };
+
+  const getCurrentMessages = () => Array.from(messageCache.values());
+
+  const getCurrentIds = () => {
+    if (messageCache.size) {
+      return new Set(messageCache.keys());
+    }
+    const ids = new Set();
+    rows.forEach((row) => {
+      if (row.dataset.messageId) {
+        ids.add(String(row.dataset.messageId));
+      }
+    });
+    return ids;
+  };
+
+  const formatTitle = (count) => {
+    if (reconnecting) {
+      return `${baseTitle} | Reconnecting${reconnectingDots}`;
+    }
+    if (count <= 0) {
+      return `${baseTitle} | No New Mail`;
+    }
+    if (count === 1) {
+      return `${baseTitle} | 1 New Mail`;
+    }
+    return `${baseTitle} | ${count} New Mails`;
+  };
+
+  const updateTitle = () => {
+    document.title = formatTitle(unseenIds.size);
+  };
+
+  const stopReconnectAnimation = () => {
+    if (!reconnectingTimer) {
+      return;
+    }
+    window.clearInterval(reconnectingTimer);
+    reconnectingTimer = null;
+  };
+
+  const startReconnectAnimation = () => {
+    stopReconnectAnimation();
+    const frames = [".", "..", "..."];
+    let index = 0;
+    reconnectingDots = frames[index];
+    reconnectingTimer = window.setInterval(() => {
+      index = (index + 1) % frames.length;
+      reconnectingDots = frames[index];
+      updateTitle();
+    }, 800);
+  };
+
+  const setReconnecting = (value) => {
+    if (reconnecting === value) {
+      return;
+    }
+    reconnecting = value;
+    if (reconnecting) {
+      startReconnectAnimation();
+    } else {
+      stopReconnectAnimation();
+    }
+    updateTitle();
+  };
+
+  const notificationSupported = () => "Notification" in window;
+
+  const getNotificationsEnabled = () => {
+    try {
+      return window.localStorage.getItem(notifyKey) === "true";
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const setNotificationsEnabled = (value) => {
+    try {
+      window.localStorage.setItem(notifyKey, String(value));
+    } catch (error) {
+      // Ignore storage errors.
+    }
+  };
+
+  const resolveNotificationsEnabled = () => {
+    if (!notificationSupported()) {
+      return false;
+    }
+    if (Notification.permission !== "granted") {
+      if (getNotificationsEnabled()) {
+        setNotificationsEnabled(false);
+      }
+      return false;
+    }
+    return getNotificationsEnabled();
+  };
+
+  const shouldNotify = () => resolveNotificationsEnabled();
+
+  const maybeNotify = () => {
+    if (!shouldNotify()) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastNotifiedAt < notifyCooldownMs) {
+      return;
+    }
+    if (unseenIds.size === 0 || unseenIds.size === lastNotifiedCount) {
+      return;
+    }
+    lastNotifiedAt = now;
+    lastNotifiedCount = unseenIds.size;
+    const inboxSuffix = currentInboxLabel ? ` in ${currentInboxLabel}` : "";
+    const body =
+      unseenIds.size === 1
+        ? `1 new mail${inboxSuffix}`
+        : `${unseenIds.size} new mails${inboxSuffix}`;
+    const title = currentInboxLabel ? `Quail — ${currentInboxLabel}` : "Quail";
+    try {
+      new Notification(title, { body });
+    } catch (error) {
+      // Ignore notification errors.
+    }
+  };
+
+  const noteNewMessages = (messages) => {
+    if (!document.hidden || !Array.isArray(messages)) {
+      return;
+    }
+    const nextIds = new Set(messages.map((message) => String(message.id)));
+    let added = 0;
+    nextIds.forEach((id) => {
+      if (!hiddenBaselineIds.has(id) && !unseenIds.has(id)) {
+        unseenIds.add(id);
+        added += 1;
+      }
+    });
+    if (added > 0) {
+      updateTitle();
+      maybeNotify();
+    }
+  };
+
+  const markHidden = () => {
+    hiddenBaselineIds = getCurrentIds();
+    unseenIds = new Set();
+    lastNotifiedCount = 0;
+    updateTitle();
+  };
+
+  const resetUnread = () => {
+    unseenIds = new Set();
+    lastNotifiedCount = 0;
+    updateTitle();
   };
 
   const buildMessageRow = (message) => {
@@ -299,6 +480,7 @@
       return bTime - aTime;
     });
     renderMessages(messages);
+    noteNewMessages(messages);
   };
 
   const setCache = (messages) => {
@@ -456,7 +638,7 @@
   };
 
   const refreshInbox = async () => {
-    if (refreshInFlight || document.hidden) {
+    if (refreshInFlight) {
       return;
     }
     if (isPaused()) {
@@ -496,11 +678,19 @@
     }
   };
 
-  const startPolling = () => {
-    if (refreshTimer || pollingIntervalMs <= 0) {
+  const startPolling = (intervalMs = pollingIntervalMs) => {
+    if (intervalMs <= 0) {
       return;
     }
-    refreshTimer = window.setInterval(refreshInbox, pollingIntervalMs);
+    if (refreshTimer) {
+      if (refreshIntervalMs === intervalMs) {
+        return;
+      }
+      window.clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+    refreshIntervalMs = intervalMs;
+    refreshTimer = window.setInterval(refreshInbox, refreshIntervalMs);
   };
 
   const stopPolling = () => {
@@ -511,14 +701,51 @@
     refreshTimer = null;
   };
 
+  const noteWsActivity = () => {
+    lastWsActivityAt = Date.now();
+  };
+
+  const stopWsHeartbeat = () => {
+    if (!wsHeartbeatTimer) {
+      return;
+    }
+    window.clearInterval(wsHeartbeatTimer);
+    wsHeartbeatTimer = null;
+  };
+
+  const startWsHeartbeat = () => {
+    stopWsHeartbeat();
+    if (!ws) {
+      return;
+    }
+    noteWsActivity();
+    wsHeartbeatTimer = window.setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      const now = Date.now();
+      if (now - lastWsActivityAt > wsHeartbeatMaxSilenceMs) {
+        ws.close();
+        return;
+      }
+      try {
+        ws.send(JSON.stringify({ type: "ping" }));
+      } catch (error) {
+        ws.close();
+      }
+    }, wsHeartbeatIntervalMs);
+  };
+
   const scheduleWsRetry = () => {
     if (!wsEnabled || wsRetryTimer) {
       return;
     }
+    const jitter = 0.8 + Math.random() * 0.4;
+    const delayMs = Math.round(wsRetryMs * jitter);
     wsRetryTimer = window.setTimeout(() => {
       wsRetryTimer = null;
       startWebSocket();
-    }, wsRetryMs);
+    }, delayMs);
     wsRetryMs = Math.min(wsRetryMs * 2, 10000);
   };
 
@@ -546,16 +773,20 @@
   };
 
   const handleWsMessage = (event) => {
-    if (isPaused()) {
-      return;
-    }
     let payload = null;
     try {
       payload = JSON.parse(event.data);
     } catch (error) {
       return;
     }
+    noteWsActivity();
     if (!payload || typeof payload.type !== "string") {
+      return;
+    }
+    if (payload.type === "pong") {
+      return;
+    }
+    if (isPaused()) {
       return;
     }
     if (payload.type === "snapshot") {
@@ -593,16 +824,21 @@
     if (!wsEnabled || ws) {
       return;
     }
+    setReconnecting(true);
     ws = new WebSocket(wsUrl);
     ws.addEventListener("open", () => {
-      stopPolling();
       resetWsRetry();
+      stopPolling();
+      startWsHeartbeat();
+      setReconnecting(false);
     });
     ws.addEventListener("message", handleWsMessage);
     ws.addEventListener("close", () => {
       ws = null;
-      startPolling();
+      startPolling(pollingIntervalMs);
       scheduleWsRetry();
+      stopWsHeartbeat();
+      setReconnecting(true);
     });
     ws.addEventListener("error", () => {
       if (ws) {
@@ -683,6 +919,52 @@
     updateThemeToggle();
   }
 
+  const notifyToggle = document.getElementById("notify-toggle");
+  const updateNotifyToggle = () => {
+    if (!notifyToggle) {
+      return;
+    }
+    if (!notificationSupported()) {
+      notifyToggle.disabled = true;
+      notifyToggle.setAttribute("aria-disabled", "true");
+    }
+    const enabled = resolveNotificationsEnabled();
+    notifyToggle.classList.toggle("is-on", enabled);
+    notifyToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+  };
+
+  if (notifyToggle) {
+    notifyToggle.addEventListener("click", async () => {
+      if (!notificationSupported()) {
+        return;
+      }
+      const enabled = getNotificationsEnabled();
+      if (enabled) {
+        setNotificationsEnabled(false);
+        updateNotifyToggle();
+        return;
+      }
+      if (Notification.permission === "granted") {
+        setNotificationsEnabled(true);
+        updateNotifyToggle();
+        return;
+      }
+      if (Notification.permission === "denied") {
+        setNotificationsEnabled(false);
+        updateNotifyToggle();
+        return;
+      }
+      try {
+        const permission = await Notification.requestPermission();
+        setNotificationsEnabled(permission === "granted");
+      } catch (error) {
+        setNotificationsEnabled(false);
+      }
+      updateNotifyToggle();
+    });
+    updateNotifyToggle();
+  }
+
   if (pauseButton) {
     pauseButton.addEventListener("click", () => {
       const paused = isPaused();
@@ -693,10 +975,12 @@
   }
 
   const handleVisibilityChange = () => {
-    if (!wsEnabled) {
+    if (document.hidden) {
+      markHidden();
       return;
     }
-    if (document.hidden) {
+    resetUnread();
+    if (!wsEnabled) {
       return;
     }
     if (!ws) {
@@ -704,11 +988,18 @@
     }
   };
 
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
   if (wsEnabled) {
     startWebSocket();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
   } else {
     startPolling();
+  }
+
+  if (document.hidden) {
+    markHidden();
+  } else {
+    resetUnread();
   }
 
   applyHidden();
