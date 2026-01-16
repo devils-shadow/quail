@@ -68,6 +68,7 @@
 </form>
 
 <form method="post" action="/admin/quarantine/restore">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <input type="hidden" name="domain" value="{{ domain_filter }}" />
   <input type="hidden" name="sender_domain" value="{{ sender_domain_filter }}" />
   <input type="hidden" name="recipient_localpart" value="{{ recipient_localpart_filter }}" />

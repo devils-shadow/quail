@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from quail import settings
 from quail.web import app
+from tests.helpers import get_csrf_token
 
 pytestmark = [pytest.mark.api, pytest.mark.integration]
 
@@ -25,7 +26,12 @@ def _build_client(tmp_path, monkeypatch):
 
 
 def _unlock_admin(client: TestClient, pin: str = "1234") -> None:
-    response = client.post("/admin/unlock", data={"pin": pin}, follow_redirects=False)
+    csrf_token = get_csrf_token(client)
+    response = client.post(
+        "/admin/unlock",
+        data={"pin": pin, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
 
 
@@ -42,6 +48,7 @@ def test_domain_policy_requires_admin_session(tmp_path, monkeypatch) -> None:
 def test_domain_policy_create_and_list(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         response = client.post(
             "/admin/domain-policies",
@@ -50,7 +57,11 @@ def test_domain_policy_create_and_list(tmp_path, monkeypatch) -> None:
                 "mode": "RESTRICTED",
                 "default_action": "QUARANTINE",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert response.status_code == 200
         payload = response.json()
@@ -71,6 +82,7 @@ def test_domain_policy_create_and_list(tmp_path, monkeypatch) -> None:
 def test_domain_policy_rejects_bad_pin(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         response = client.post(
             "/admin/domain-policies",
@@ -79,6 +91,10 @@ def test_domain_policy_rejects_bad_pin(tmp_path, monkeypatch) -> None:
                 "mode": "OPEN",
                 "default_action": "INBOX",
             },
-            headers={"accept": "application/json", "x-admin-pin": "9999"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "9999",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert response.status_code == 403

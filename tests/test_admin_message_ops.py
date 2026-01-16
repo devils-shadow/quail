@@ -10,6 +10,7 @@ from quail import db
 from tests.helpers import (
     build_client,
     build_email,
+    get_csrf_token,
     insert_attachment,
     insert_message,
     unlock_admin,
@@ -41,9 +42,11 @@ def test_admin_delete_message_removes_files(tmp_path, monkeypatch) -> None:
             content_type="application/pdf",
             content=b"delete",
         )
+        csrf_token = get_csrf_token(client)
 
         response = client.post(
             f"/admin/message/{message_row['id']}/delete",
+            data={"csrf_token": csrf_token},
             follow_redirects=False,
         )
 
@@ -81,8 +84,13 @@ def test_admin_clear_messages_removes_all(tmp_path, monkeypatch) -> None:
             content_type="application/pdf",
             content=b"two",
         )
+        csrf_token = get_csrf_token(client)
 
-        response = client.post("/admin/messages/clear", follow_redirects=False)
+        response = client.post(
+            "/admin/messages/clear",
+            data={"csrf_token": csrf_token},
+            follow_redirects=False,
+        )
 
         assert response.status_code == 303
         assert _fetch_message_ids(settings_obj) == set()

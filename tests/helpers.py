@@ -52,8 +52,24 @@ def build_client(tmp_path, monkeypatch):
         yield client, settings_obj
 
 
+def get_csrf_token(client: TestClient) -> str:
+    token = client.cookies.get("quail_csrf")
+    if token:
+        return token
+    response = client.get("/admin/unlock")
+    assert response.status_code == 200
+    token = client.cookies.get("quail_csrf")
+    assert token
+    return token
+
+
 def unlock_admin(client: TestClient, pin: str = "1234") -> None:
-    response = client.post("/admin/unlock", data={"pin": pin}, follow_redirects=False)
+    csrf_token = get_csrf_token(client)
+    response = client.post(
+        "/admin/unlock",
+        data={"pin": pin, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
 
 

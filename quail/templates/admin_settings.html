@@ -74,6 +74,7 @@
       </div>
       <div class="card__body">
         <form method="post" action="/admin/settings" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <div class="form__grid">
             <div class="field">
               <label
@@ -167,6 +168,7 @@
         </div>
         <div class="card__body">
           <form method="post" action="/admin/domain-policies" class="form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="hidden" name="domain" value="{{ policy.domain }}" />
             <div class="form__grid">
               <div class="field">
@@ -235,6 +237,7 @@
       </div>
       <div class="card__body">
         <form method="post" action="/admin/domain-policies" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <div class="form__grid">
             <div class="field">
               <label class="field__label" for="domain_policy_domain">Domain</label>
@@ -326,7 +329,9 @@
             </thead>
             <tbody>
             {% for rule in rules %}
-              <form id="rule_form_{{ rule.id }}" method="post" action="/admin/rules/{{ rule.id }}"></form>
+              <form id="rule_form_{{ rule.id }}" method="post" action="/admin/rules/{{ rule.id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              </form>
               <tr>
                 <td>
                   <input form="rule_form_{{ rule.id }}" type="hidden" name="enabled" value="0" />
@@ -420,6 +425,7 @@
               </div>
               <div class="card__body">
                 <form method="post" action="/admin/rules" class="form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <input type="hidden" name="domain" value="{{ rules_domain }}" />
                   <div class="form__grid">
                     <div class="field">
@@ -490,6 +496,7 @@
               </div>
               <div class="card__body">
                 <form method="post" action="/admin/rules/test" class="form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <input type="hidden" name="rules_domain" value="{{ rules_domain }}" />
                   <div class="form__grid">
                     <div class="field">
@@ -618,6 +625,7 @@
       </div>
       <div class="card__body">
         <form method="post" action="/admin/messages/clear">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <button class="button danger round btn" type="submit" onclick="return confirm('Delete all messages and attachments?')">
             Delete all messages
           </button>

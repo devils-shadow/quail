@@ -20,6 +20,7 @@
     <span class="message-details__actions">
       {% if is_admin %}
       <form method="post" action="/admin/message/{{ message.id }}/delete">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button class="button secondary round" type="submit">Delete</button>
       </form>
       {% endif %}

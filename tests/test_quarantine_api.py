@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from quail import db, settings
 from quail.web import app
+from tests.helpers import get_csrf_token
 
 pytestmark = [pytest.mark.api, pytest.mark.integration]
 
@@ -26,7 +27,12 @@ def _build_client(tmp_path, monkeypatch):
 
 
 def _unlock_admin(client: TestClient, pin: str = "1234") -> None:
-    response = client.post("/admin/unlock", data={"pin": pin}, follow_redirects=False)
+    csrf_token = get_csrf_token(client)
+    response = client.post(
+        "/admin/unlock",
+        data={"pin": pin, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
 
 
@@ -74,6 +80,7 @@ def _insert_quarantined_message(db_path, eml_path, quarantine_reason: str) -> in
 def test_quarantine_restore_endpoint(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
         settings_obj = settings.get_settings()
         eml_path = settings_obj.eml_dir / "restore.eml"
         eml_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +92,11 @@ def test_quarantine_restore_endpoint(tmp_path, monkeypatch) -> None:
         response = client.post(
             "/admin/quarantine/restore",
             data={"message_id": str(message_id)},
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert response.status_code == 200
         assert response.json()["restored"] == [message_id]
@@ -103,6 +114,7 @@ def test_quarantine_restore_endpoint(tmp_path, monkeypatch) -> None:
 def test_quarantine_delete_endpoint(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
         settings_obj = settings.get_settings()
         eml_path = settings_obj.eml_dir / "delete.eml"
         attachment_path = settings_obj.attachment_dir / "delete.pdf"
@@ -126,7 +138,11 @@ def test_quarantine_delete_endpoint(tmp_path, monkeypatch) -> None:
         response = client.post(
             "/admin/quarantine/delete",
             data={"message_id": str(message_id)},
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert response.status_code == 200
         assert response.json()["deleted"] == [message_id]

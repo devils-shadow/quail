@@ -72,8 +72,9 @@ To upgrade an existing install:
 
 - When enabled in settings, HTML renders in a sandboxed iframe alongside
   plaintext and attachments.
-- HTML is rendered as sent; CID inline images are rewritten to local attachment
-  URLs, while plaintext uses `html2text` conversion.
+- HTML is rendered as sent (no sanitization) to preserve layout fidelity; CID
+  inline images are rewritten to local attachment URLs, while plaintext uses
+  `html2text` conversion.
 - If HTML rendering is disabled or missing, Quail falls back to plaintext only.
 - In dark mode, minimal HTML messages inherit the app theme for readable
   contrast without altering richer layouts.
