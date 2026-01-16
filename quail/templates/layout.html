@@ -269,11 +269,24 @@
       body.list-view .list-scroll {
         flex: 1;
         min-height: 0;
+        display: flex;
+      }
+
+      body.list-view .list-scroll-card {
+        flex: 1;
+        min-height: 0;
         overflow: auto;
       }
 
-      body.list-view .list-scroll .card {
+      body.list-view .list-scroll-card {
         margin-bottom: 0;
+      }
+
+      body.list-view .list-scroll-card thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--table-head);
       }
 
       .page-header {
