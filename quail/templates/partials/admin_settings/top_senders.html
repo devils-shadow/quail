@@ -1,0 +1,13 @@
+  {% call sections.card_section("Top sender domains (last 24h)", with_body=False) %}
+    {% if top_sender_domains %}
+      <ul class="stat-list">
+      {% for entry in top_sender_domains %}
+        <li><span>{{ entry.domain }}</span><strong>{{ entry.count }}</strong></li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <div class="card__body">
+        <p>No sender domain data available yet.</p>
+      </div>
+    {% endif %}
+  {% endcall %}

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from quail import settings
 from quail.web import app
+from tests.helpers import get_csrf_token
 
 pytestmark = [pytest.mark.api, pytest.mark.integration]
 
@@ -25,7 +26,12 @@ def _build_client(tmp_path, monkeypatch):
 
 
 def _unlock_admin(client: TestClient, pin: str = "1234") -> None:
-    response = client.post("/admin/unlock", data={"pin": pin}, follow_redirects=False)
+    csrf_token = get_csrf_token(client)
+    response = client.post(
+        "/admin/unlock",
+        data={"pin": pin, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
 
 
@@ -43,6 +49,7 @@ def test_rules_require_admin_session(tmp_path, monkeypatch) -> None:
 def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         create_response = client.post(
             "/admin/rules",
@@ -56,7 +63,11 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
                 "enabled": "1",
                 "note": "VIP sender",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert create_response.status_code == 200
         payload = create_response.json()
@@ -85,7 +96,11 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
                 "enabled": "0",
                 "note": "Updated",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert update_response.status_code == 200
         updated = update_response.json()["rule"]
@@ -96,14 +111,22 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
         test_response = client.post(
             "/admin/rules/test",
             data={"pattern": r"^user$", "sample": "user"},
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert test_response.status_code == 200
         assert test_response.json()["matched"] is True
 
         delete_response = client.delete(
             f"/admin/rules/{rule_id}",
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert delete_response.status_code == 200
         assert delete_response.json()["deleted"] is True
@@ -112,6 +135,7 @@ def test_rule_crud_and_test_endpoint(tmp_path, monkeypatch) -> None:
 def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         bad_response = client.post(
             "/admin/rules",
@@ -123,7 +147,11 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
                 "priority": "1",
                 "action": "INBOX",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert bad_response.status_code == 400
         assert "Invalid regex pattern" in bad_response.json()["detail"]
@@ -138,7 +166,11 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
                 "priority": "2",
                 "action": "INBOX",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         second_response = client.post(
             "/admin/rules",
@@ -150,7 +182,11 @@ def test_rule_validation_and_priority_order(tmp_path, monkeypatch) -> None:
                 "priority": "1",
                 "action": "INBOX",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
         assert first_response.status_code == 200
         assert second_response.status_code == 200

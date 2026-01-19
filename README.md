@@ -72,8 +72,9 @@ To upgrade an existing install:
 
 - When enabled in settings, HTML renders in a sandboxed iframe alongside
   plaintext and attachments.
-- HTML is rendered as sent; CID inline images are rewritten to local attachment
-  URLs, while plaintext uses `html2text` conversion.
+- HTML is rendered as sent (no sanitization) to preserve layout fidelity; CID
+  inline images are rewritten to local attachment URLs, while plaintext uses
+  `html2text` conversion.
 - If HTML rendering is disabled or missing, Quail falls back to plaintext only.
 - In dark mode, minimal HTML messages inherit the app theme for readable
   contrast without altering richer layouts.
@@ -82,6 +83,9 @@ To upgrade an existing install:
 
 - See the [testing guide](docs/TESTING.md) for pytest markers, standard
   commands, and CI coverage.
+- If you edit CSS partials under `quail/templates/partials/styles/`, rebuild
+  the bundled stylesheet with `make css-bundle` (or `make css-bundle-restart`).
+  `make test` also rebuilds the bundle if the partials changed.
 
 ## 🧭 Deprecations
 

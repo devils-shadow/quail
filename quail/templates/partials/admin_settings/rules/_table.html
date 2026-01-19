@@ -1,0 +1,102 @@
+<table class="table admin-table">
+  <thead>
+    <tr>
+      <th>Enabled</th>
+      <th>Type</th>
+      <th>Match field</th>
+      <th>Pattern</th>
+      <th>Action</th>
+      <th>Priority</th>
+      <th>Note</th>
+      <th>Last modified</th>
+      <th>Admin PIN</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for rule in rules %}
+    <form id="rule_form_{{ rule.id }}" method="post" action="/admin/rules/{{ rule.id }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    </form>
+    <tr>
+      <td>
+        <input form="rule_form_{{ rule.id }}" type="hidden" name="enabled" value="0" />
+        <input
+          form="rule_form_{{ rule.id }}"
+          type="checkbox"
+          name="enabled"
+          value="1"
+          {% if rule.enabled %}checked{% endif %}
+        />
+      </td>
+      <td>
+        <select class="select" form="rule_form_{{ rule.id }}" name="rule_type">
+          {% for rule_type in rule_types %}
+          <option value="{{ rule_type }}" {% if rule.rule_type == rule_type %}selected{% endif %}>
+            {{ rule_type }}
+          </option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <select class="select" form="rule_form_{{ rule.id }}" name="match_field">
+          {% for field in match_fields %}
+          <option value="{{ field }}" {% if rule.match_field == field %}selected{% endif %}>
+            {{ field }}
+          </option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <input class="input" form="rule_form_{{ rule.id }}" name="pattern" type="text" value="{{ rule.pattern }}" />
+      </td>
+      <td>
+        <select class="select" form="rule_form_{{ rule.id }}" name="action">
+          {% for action in rule_actions %}
+          <option value="{{ action }}" {% if rule.action == action %}selected{% endif %}>
+            {{ action }}
+          </option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>
+        <input
+          class="input"
+          form="rule_form_{{ rule.id }}"
+          name="priority"
+          type="number"
+          min="0"
+          value="{{ rule.priority }}"
+        />
+      </td>
+      <td>
+        <input class="input" form="rule_form_{{ rule.id }}" name="note" type="text" value="{{ rule.note or '' }}" />
+      </td>
+      <td>{{ rule.updated_at }}</td>
+      <td>
+        <input
+          class="input"
+          form="rule_form_{{ rule.id }}"
+          name="admin_pin"
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          minlength="4"
+          maxlength="9"
+        />
+      </td>
+      <td class="table-actions">
+        <button class="button round btn" form="rule_form_{{ rule.id }}" type="submit">Save</button>
+        <button
+          class="button secondary round btn"
+          form="rule_form_{{ rule.id }}"
+          type="submit"
+          formaction="/admin/rules/{{ rule.id }}/delete"
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

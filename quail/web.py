@@ -45,7 +45,6 @@ from quail.logging_config import configure_logging
 from quail.security import hash_pin, verify_pin
 from quail.settings import get_settings
 
-
 ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
 QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
@@ -65,16 +64,21 @@ ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
 ADMIN_PIN_MAX_LEN = 9
 ADMIN_PIN_MIN_LEN = 4
 MAX_LIST_ROWS = 200
+CSRF_COOKIE = "quail_csrf"
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+STATIC_CSS_PATH = STATIC_DIR / "quail.css"
 ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "true").strip().lower() in {"1", "true", "yes", "on"}
 RAW_ALLOWED_ORIGINS = os.getenv("QUAIL_ALLOWED_ORIGINS", "")
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates.env.globals["static_version"] = (
+    str(int(STATIC_CSS_PATH.stat().st_mtime)) if STATIC_CSS_PATH.exists() else "dev"
+)
 LOGGER = logging.getLogger(__name__)
 INBOX_HUB = None
 WS_EVENT_TASK: asyncio.Task | None = None
@@ -152,6 +156,24 @@ def _origin_allowed(request: Request | WebSocket) -> bool:
     return origin in allowed
 
 
+def _secure_cookie_required(request: Request) -> bool:
+    if request.url.scheme == "https":
+        return True
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.split(",", maxsplit=1)[0].strip().lower() == "https"
+    return False
+
+
+def _secure_cookie_required(request: Request) -> bool:
+    if request.url.scheme == "https":
+        return True
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.split(",", maxsplit=1)[0].strip().lower() == "https"
+    return False
+
+
 def _init_settings(settings_path: Path) -> None:
     if db.get_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY) is None:
         db.set_setting(settings_path, SETTINGS_ALLOWED_MIME_KEY, DEFAULT_ALLOWED_MIME_TYPES_VALUE)
@@ -193,6 +215,32 @@ def _set_session_state(settings_db_path: Path, token_hash: str, expires_at: date
 def _clear_session_state(settings_db_path: Path) -> None:
     db.set_setting(settings_db_path, "admin_session_hash", "")
     db.set_setting(settings_db_path, "admin_session_expires_at", "")
+
+
+def _get_or_create_csrf_token(request: Request) -> str:
+    token = request.cookies.get(CSRF_COOKIE)
+    if token:
+        return token
+    return secrets.token_urlsafe(32)
+
+
+def _set_csrf_cookie(response: Response, request: Request, token: str) -> None:
+    response.set_cookie(
+        CSRF_COOKIE,
+        token,
+        max_age=int(ADMIN_SESSION_TTL.total_seconds()),
+        httponly=True,
+        samesite="lax",
+        secure=_secure_cookie_required(request),
+    )
+
+
+def _require_csrf(request: Request, token: str | None) -> None:
+    cookie_token = request.cookies.get(CSRF_COOKIE)
+    header_token = request.headers.get("x-csrf-token")
+    supplied = token or header_token
+    if not cookie_token or not supplied or supplied != cookie_token:
+        raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
 
 
 def _is_rate_limited(settings_db_path: Path, source_ip: str, now: datetime) -> bool:
@@ -565,8 +613,8 @@ def _get_message_summary(db_path: Path, message_id: int) -> dict[str, str] | Non
 async def _ws_event_loop() -> None:
     settings = get_settings()
     last_event_id = db.get_last_inbox_event_id(settings.db_path)
-    try:
-        while True:
+    while True:
+        try:
             events = [dict(row) for row in db.list_inbox_events(settings.db_path, last_event_id)]
             if not events:
                 await asyncio.sleep(1)
@@ -574,8 +622,11 @@ async def _ws_event_loop() -> None:
             for event in events:
                 last_event_id = event["id"]
                 await _broadcast_inbox_event(settings.db_path, event)
-    except asyncio.CancelledError:
-        return
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            LOGGER.exception("Inbox WebSocket loop error; retrying.")
+            await asyncio.sleep(1)
 
 
 async def _broadcast_inbox_event(db_path: Path, event: dict[str, object]) -> None:
@@ -758,14 +809,12 @@ def _get_ingest_metrics(db_path: Path, now: datetime | None = None) -> dict[str,
         inbox_row = conn.execute(
             "SELECT COUNT(*) AS count FROM messages WHERE status = 'INBOX' AND quarantined = 0"
         ).fetchone()
-        quarantine_row = conn.execute(
-            """
+        quarantine_row = conn.execute("""
             SELECT COUNT(*) AS count
             FROM messages
             WHERE (status = 'QUARANTINE' OR quarantined = 1)
               AND status != 'DROP'
-            """
-        ).fetchone()
+            """).fetchone()
         dropped_row = conn.execute(
             "SELECT COUNT(*) AS count FROM messages WHERE status = 'DROP' AND received_at >= ?",
             (cutoff.isoformat(),),
@@ -1161,6 +1210,7 @@ async def inbox(request: Request) -> HTMLResponse:
             "is_admin": is_admin,
             "current_inbox": inbox_filter or "",
             "enable_ws": ENABLE_WS,
+            "body_class": "list-view",
         },
     )
 
@@ -1220,7 +1270,8 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
     if allow_html and html_body:
         full_html_srcdoc = _build_full_html_srcdoc(html_body, message_id)
     is_minimal_html = _is_minimal_html(html_body)
-    return templates.TemplateResponse(
+    csrf_token = _get_or_create_csrf_token(request)
+    response = templates.TemplateResponse(
         "message.html",
         {
             "request": request,
@@ -1233,8 +1284,11 @@ async def message_detail(request: Request, message_id: int) -> HTMLResponse:
             "current_inbox": request.query_params.get("inbox") or "",
             "body_class": "message-view",
             "is_minimal_html": is_minimal_html,
+            "csrf_token": csrf_token,
         },
     )
+    _set_csrf_cookie(response, request, csrf_token)
+    return response
 
 
 @app.get("/message/{message_id}/attachments/{attachment_id}")
@@ -1257,8 +1311,11 @@ async def attachment_download(
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Attachment not found.")
+    stored_path = Path(row["stored_path"])
+    if not stored_path.exists():
+        raise HTTPException(status_code=404, detail="Attachment not found.")
     return FileResponse(
-        row["stored_path"],
+        stored_path,
         media_type=row["content_type"],
         filename=row["filename"],
     )
@@ -1272,6 +1329,8 @@ async def inline_attachment(request: Request, message_id: int, content_id: str) 
     if message["quarantined"] and not is_admin:
         raise HTTPException(status_code=404, detail="Message not found.")
     eml_path = Path(message["eml_path"])
+    if not eml_path.exists():
+        raise HTTPException(status_code=404, detail="Inline attachment not found.")
     raw_bytes = eml_path.read_bytes()
     parsed = BytesParser(policy=policy.default).parsebytes(raw_bytes)
     target = content_id.strip("<>")
@@ -1288,9 +1347,12 @@ async def inline_attachment(request: Request, message_id: int, content_id: str) 
 
 
 @app.post("/admin/message/{message_id}/delete")
-async def admin_delete_message(request: Request, message_id: int) -> RedirectResponse:
+async def admin_delete_message(
+    request: Request, message_id: int, csrf_token: str | None = Form(None)
+) -> RedirectResponse:
     if not _is_admin(request):
         return RedirectResponse(url="/admin/unlock", status_code=303)
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     message = _get_message(settings.db_path, message_id)
     _delete_message(settings.db_path, message_id)
@@ -1315,19 +1377,26 @@ async def admin_delete_message(request: Request, message_id: int) -> RedirectRes
 @app.get("/admin/unlock", response_class=HTMLResponse)
 async def admin_unlock(request: Request) -> HTMLResponse:
     settings = get_settings()
-    return templates.TemplateResponse(
+    csrf_token = _get_or_create_csrf_token(request)
+    response = templates.TemplateResponse(
         "admin_unlock.html",
         {
             "request": request,
             "error": request.query_params.get("error"),
             "pin_configured": bool(_get_admin_pin_hash(settings.db_path)),
+            "csrf_token": csrf_token,
         },
     )
+    _set_csrf_cookie(response, request, csrf_token)
+    return response
 
 
 @app.post("/admin/unlock", response_class=HTMLResponse)
-async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLResponse:
+async def admin_unlock_post(
+    request: Request, pin: str = Form(...), csrf_token: str | None = Form(None)
+) -> HTMLResponse:
     settings = get_settings()
+    _require_csrf(request, csrf_token)
     source_ip = _get_client_ip(request)
     now = _now()
     if _is_rate_limited(settings.db_path, source_ip, now):
@@ -1377,7 +1446,10 @@ async def admin_unlock_post(request: Request, pin: str = Form(...)) -> HTMLRespo
         max_age=int(ADMIN_SESSION_TTL.total_seconds()),
         httponly=True,
         samesite="lax",
+        secure=_secure_cookie_required(request),
     )
+    csrf_token = _get_or_create_csrf_token(request)
+    _set_csrf_cookie(response, request, csrf_token)
     return response
 
 
@@ -1393,8 +1465,10 @@ async def admin_settings(request: Request) -> HTMLResponse:
     ingest_attempts = [dict(row) for row in db.list_ingest_attempts(settings.db_path)]
     rules_domain = _normalize_domain(request.query_params.get("rules_domain"))
     rules = db.list_address_rules(settings.db_path, rules_domain) if rules_domain else []
+    csrf_token = _get_or_create_csrf_token(request)
     context = {
         "request": request,
+        "csrf_token": csrf_token,
         "allowed_mime_types": db.get_setting(settings.db_path, SETTINGS_ALLOWED_MIME_KEY)
         or DEFAULT_ALLOWED_MIME_TYPES_VALUE,
         "retention_days": db.get_setting(settings.db_path, RETENTION_DAYS_KEY)
@@ -1424,12 +1498,15 @@ async def admin_settings(request: Request) -> HTMLResponse:
         "match_fields": MATCH_FIELDS,
         "rule_actions": DECISION_STATUSES,
     }
-    return templates.TemplateResponse("admin_settings.html", context)
+    response = templates.TemplateResponse("admin_settings.html", context)
+    _set_csrf_cookie(response, request, csrf_token)
+    return response
 
 
 @app.post("/admin/settings")
 async def admin_settings_post(
     request: Request,
+    csrf_token: str | None = Form(None),
     allowed_mime_types: str = Form(""),
     retention_days: str = Form(""),
     quarantine_retention_days: str = Form(""),
@@ -1439,6 +1516,7 @@ async def admin_settings_post(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
 
     settings = get_settings()
     before_settings = {
@@ -1532,6 +1610,7 @@ async def admin_domain_policies(request: Request, admin_pin: str | None = None) 
 @app.post("/admin/domain-policies", response_class=JSONResponse)
 async def admin_domain_policies_post(
     request: Request,
+    csrf_token: str | None = Form(None),
     domain: str = Form(...),
     mode: str = Form(...),
     default_action: str = Form(...),
@@ -1541,6 +1620,7 @@ async def admin_domain_policies_post(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
     if not _verify_admin_pin(settings.db_path, resolved_pin):
@@ -1617,6 +1697,7 @@ async def admin_rules(request: Request, domain: str | None = None) -> JSONRespon
 @app.post("/admin/rules", response_class=JSONResponse)
 async def admin_rules_post(
     request: Request,
+    csrf_token: str | None = Form(None),
     domain: str = Form(...),
     rule_type: str = Form(...),
     match_field: str = Form(...),
@@ -1630,6 +1711,7 @@ async def admin_rules_post(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
     if not _verify_admin_pin(settings.db_path, resolved_pin):
@@ -1677,6 +1759,7 @@ async def admin_rules_post(
 @app.post("/admin/rules/test", response_class=JSONResponse)
 async def admin_rules_test(
     request: Request,
+    csrf_token: str | None = Form(None),
     pattern: str = Form(...),
     sample: str = Form(""),
     admin_pin: str | None = Form(None),
@@ -1685,6 +1768,7 @@ async def admin_rules_test(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
     if not _verify_admin_pin(settings.db_path, resolved_pin):
@@ -1711,6 +1795,7 @@ async def admin_rules_test(
 async def admin_rules_update(
     request: Request,
     rule_id: int,
+    csrf_token: str | None = Form(None),
     rule_type: str = Form(...),
     match_field: str = Form(...),
     pattern: str = Form(...),
@@ -1723,6 +1808,7 @@ async def admin_rules_update(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
     if not _verify_admin_pin(settings.db_path, resolved_pin):
@@ -1777,10 +1863,12 @@ async def admin_rules_delete(
     request: Request,
     rule_id: int,
     admin_pin: str | None = None,
+    csrf_token: str | None = None,
 ) -> JSONResponse:
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
     if not _verify_admin_pin(settings.db_path, resolved_pin):
@@ -1813,8 +1901,9 @@ async def admin_rules_delete_post(
     request: Request,
     rule_id: int,
     admin_pin: str | None = Form(None),
+    csrf_token: str | None = Form(None),
 ) -> RedirectResponse:
-    return await admin_rules_delete(request, rule_id, admin_pin)
+    return await admin_rules_delete(request, rule_id, admin_pin, csrf_token)
 
 
 @app.get("/admin/quarantine", response_class=HTMLResponse)
@@ -1841,7 +1930,8 @@ async def admin_quarantine(request: Request) -> HTMLResponse:
         end_date,
     )
     _log_admin_action(settings.db_path, "admin_quarantine_view", request, entity="quarantine")
-    return templates.TemplateResponse(
+    csrf_token = _get_or_create_csrf_token(request)
+    response = templates.TemplateResponse(
         "admin_quarantine.html",
         {
             "request": request,
@@ -1852,13 +1942,18 @@ async def admin_quarantine(request: Request) -> HTMLResponse:
             "start_date_filter": request.query_params.get("start_date") or "",
             "end_date_filter": request.query_params.get("end_date") or "",
             "match_fields": MATCH_FIELDS,
+            "csrf_token": csrf_token,
+            "body_class": "list-view",
         },
     )
+    _set_csrf_cookie(response, request, csrf_token)
+    return response
 
 
 @app.post("/admin/quarantine/restore")
 async def admin_quarantine_restore(
     request: Request,
+    csrf_token: str | None = Form(None),
     admin_pin: str | None = Form(None),
     domain: str | None = Form(None),
     sender_domain: str | None = Form(None),
@@ -1869,6 +1964,7 @@ async def admin_quarantine_restore(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     message_ids = await _extract_message_ids(request)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
@@ -1913,6 +2009,7 @@ async def admin_quarantine_restore(
 @app.post("/admin/quarantine/delete")
 async def admin_quarantine_delete(
     request: Request,
+    csrf_token: str | None = Form(None),
     admin_pin: str | None = Form(None),
     domain: str | None = Form(None),
     sender_domain: str | None = Form(None),
@@ -1923,6 +2020,7 @@ async def admin_quarantine_delete(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     message_ids = await _extract_message_ids(request)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
@@ -1967,6 +2065,7 @@ async def admin_quarantine_delete(
 @app.post("/admin/quarantine/rule-from-selection")
 async def admin_quarantine_rule_from_selection(
     request: Request,
+    csrf_token: str | None = Form(None),
     rule_type: str = Form(...),
     match_field: str = Form(...),
     admin_pin: str | None = Form(None),
@@ -1979,6 +2078,7 @@ async def admin_quarantine_rule_from_selection(
     redirect = _require_admin_session(request)
     if redirect:
         return redirect
+    _require_csrf(request, csrf_token)
     message_ids = await _extract_message_ids(request)
     settings = get_settings()
     resolved_pin = _get_admin_pin_from_request(request, admin_pin)
@@ -2079,9 +2179,12 @@ async def admin_quarantine_rule_from_selection(
 
 
 @app.post("/admin/messages/clear")
-async def admin_clear_messages(request: Request) -> RedirectResponse:
+async def admin_clear_messages(
+    request: Request, csrf_token: str | None = Form(None)
+) -> RedirectResponse:
     if not _is_admin(request):
         return RedirectResponse(url="/admin/unlock", status_code=303)
+    _require_csrf(request, csrf_token)
     settings = get_settings()
     with db.get_connection(settings.db_path) as conn:
         before_count = conn.execute("SELECT COUNT(*) AS count FROM messages").fetchone()["count"]

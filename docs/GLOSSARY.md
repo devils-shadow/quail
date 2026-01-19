@@ -11,4 +11,4 @@
 - **FastAPI:** The Python web framework used to implement the Quail service【104907567664902†L49-L53】.
 - **Postfix:** The mail transfer agent that receives inbound SMTP messages for configured domains (example: `mail.example.test`) and hands them off to the ingest script.
 - **SQLite:** The embedded database used for storing message metadata and settings【104907567664902†L62-L70】.
-- **WebSocket:** A planned upgrade path for real-time inbox updates (see `WEBSOCKET_INBOX_PLAN.md`).
+- **WebSocket:** The real-time update channel used by the inbox UI, with polling fallback.

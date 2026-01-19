@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from quail import db, web
-from tests.helpers import build_client, unlock_admin
+from tests.helpers import build_client, get_csrf_token, unlock_admin
 
 pytestmark = pytest.mark.api
 
@@ -13,6 +13,7 @@ pytestmark = pytest.mark.api
 def test_admin_settings_update_persists(tmp_path, monkeypatch) -> None:
     with build_client(tmp_path, monkeypatch) as (client, settings_obj):
         unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         response = client.post(
             "/admin/settings",
@@ -21,6 +22,7 @@ def test_admin_settings_update_persists(tmp_path, monkeypatch) -> None:
                 "retention_days": "21",
                 "quarantine_retention_days": "5",
                 "allow_html": "on",
+                "csrf_token": csrf_token,
             },
             follow_redirects=False,
         )
@@ -37,6 +39,7 @@ def test_admin_settings_update_persists(tmp_path, monkeypatch) -> None:
 def test_admin_settings_rejects_bad_values(tmp_path, monkeypatch) -> None:
     with build_client(tmp_path, monkeypatch) as (client, settings_obj):
         unlock_admin(client, pin="1234")
+        csrf_token = get_csrf_token(client)
 
         response = client.post(
             "/admin/settings",
@@ -44,6 +47,7 @@ def test_admin_settings_rejects_bad_values(tmp_path, monkeypatch) -> None:
                 "allowed_mime_types": "application/pdf",
                 "retention_days": "0",
                 "quarantine_retention_days": "5",
+                "csrf_token": csrf_token,
             },
             follow_redirects=False,
         )

@@ -1,0 +1,28 @@
+  {% call sections.card_section("Ingest health (recent)", with_body=False) %}
+    {% if ingest_attempts %}
+      <table class="table admin-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Recipient</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for attempt in ingest_attempts %}
+          <tr>
+            <td>{{ attempt.occurred_at }}</td>
+            <td>{{ attempt.status }}</td>
+            <td>{{ attempt.envelope_rcpt or "Unknown" }}</td>
+            <td>{{ attempt.error_summary or "OK" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="card__body">
+        <p>No ingest attempts recorded yet.</p>
+      </div>
+    {% endif %}
+  {% endcall %}

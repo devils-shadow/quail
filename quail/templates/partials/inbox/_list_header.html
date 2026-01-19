@@ -1,0 +1,41 @@
+<div class="page-header">
+    <div>
+      <h1 class="page-title">Received Mail</h1>
+      <p class="page-subtitle">Ephemeral mail for testing and development.</p>
+    </div>
+    <div class="toolbar">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
+        <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
+        <span class="theme-toggle__thumb" aria-hidden="true"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon">🌚</span>
+      </button>
+      <span
+        class="tooltip-label"
+        data-tip="Desktop notifications for new emails (requires browser permission)."
+      >
+        <button class="theme-toggle notify-toggle" id="notify-toggle" type="button" aria-label="Toggle notifications">
+          <span class="theme-toggle__icon theme-toggle__icon--sun">🔕</span>
+          <span class="theme-toggle__thumb" aria-hidden="true"></span>
+          <span class="theme-toggle__icon theme-toggle__icon--moon">🔔</span>
+        </button>
+      </span>
+      <form method="get" action="/inbox">
+        <input
+          class="input round input--filter"
+          type="text"
+          name="inbox"
+          value="{{ current_inbox | default('') }}"
+          placeholder="Filter inbox (e.g. test123, test*)"
+        />
+        <button class="button square round" type="submit">
+          <span class="button-label">GO</span>
+        </button>
+      </form>
+      <button class="button secondary icon round" id="trash-button" type="button" aria-label="Delete messages">
+        🗑️
+      </button>
+      <button class="button secondary icon round" id="pause-button" type="button" aria-label="Pause refresh">
+        ⏸️
+      </button>
+    </div>
+  </div>

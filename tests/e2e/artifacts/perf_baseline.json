@@ -1,0 +1,9 @@
+{
+  "url": "http://127.0.0.1:8000/inbox",
+  "html_bytes": 42172,
+  "request_count": 4,
+  "resource_count": 3,
+  "domcontentloaded_ms": 42,
+  "load_ms": 42.200000000186265,
+  "ws_enabled": true
+}

@@ -1,0 +1,10 @@
+<form method="get" action="/admin/settings" class="form">
+  <div class="form__grid">
+    {% call forms.field("Domain", "rules_domain") %}
+      <input class="field__control input" id="rules_domain" name="rules_domain" type="text" value="{{ rules_domain or '' }}" />
+    {% endcall %}
+  </div>
+  <div class="card__actions">
+    <button class="button round btn" type="submit">Load</button>
+  </div>
+</form>

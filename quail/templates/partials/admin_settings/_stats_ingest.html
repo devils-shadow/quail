@@ -1,0 +1,12 @@
+<div class="card">
+  <div class="card__header">
+    <h2 class="card__title">Ingest metrics (last 24h)</h2>
+  </div>
+  <ul class="stat-list">
+    <li><span>Inbox messages</span><strong>{{ inbox_message_count }}</strong></li>
+    <li><span>Quarantine messages</span><strong>{{ quarantine_message_count }}</strong></li>
+    <li><span>Dropped messages</span><strong>{{ dropped_message_count }}</strong></li>
+    <li><span>Ingest total</span><strong>{{ ingest_last_24h }}</strong></li>
+    <li><span>Recent ingest rate (messages/hour)</span><strong>{{ "%.2f" | format(recent_ingest_rate) }}</strong></li>
+  </ul>
+</div>

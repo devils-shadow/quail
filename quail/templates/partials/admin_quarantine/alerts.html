@@ -1,0 +1,17 @@
+
+
+  {% if request.query_params.get("error") == "selection" %}
+  <p>No messages selected.</p>
+  {% endif %}
+  {% if request.query_params.get("error") == "rule" %}
+  <p>No rules could be created from the selection.</p>
+  {% endif %}
+  {% if request.query_params.get("restored") %}
+  <p>Selected messages restored to inbox.</p>
+  {% endif %}
+  {% if request.query_params.get("deleted") %}
+  <p>Selected messages deleted.</p>
+  {% endif %}
+  {% if request.query_params.get("rules_created") %}
+  <p>Rule(s) created from selection.</p>
+  {% endif %}

@@ -1,0 +1,6 @@
+{% macro field(label, field_id, label_class="field__label", label_attrs=None) %}
+<div class="field">
+  <label class="{{ label_class }}" for="{{ field_id }}"{% if label_attrs %} {{ label_attrs | safe }}{% endif %}>{{ label }}</label>
+  {{ caller() }}
+</div>
+{% endmacro %}

@@ -1,0 +1,11 @@
+<div class="tabs" data-tabs>
+  {% if allow_html and html_srcdoc %}
+  <button class="tab active" type="button" data-tab="html" aria-selected="true">
+    HTML
+  </button>
+  <button class="tab" type="button" data-tab="text" aria-selected="false">TEXT</button>
+  {% else %}
+  <button class="tab active" type="button" data-tab="text" aria-selected="true">TEXT</button>
+  {% endif %}
+  <button class="tab" type="button" data-tab="attachments" aria-selected="false">ATTACHMENTS</button>
+</div>

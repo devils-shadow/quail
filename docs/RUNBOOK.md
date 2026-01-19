@@ -41,6 +41,10 @@ uses the existing polling behavior.
 For WebSocket origin checks, Quail allows the current host origin by default.
 To override, set `QUAIL_ALLOWED_ORIGINS` (comma-separated origins).
 
+The inbox client sends app-level ping/pong keepalives and automatically
+reconnects with backoff if a socket goes silent. When the socket disconnects,
+the UI falls back to polling until the WebSocket returns.
+
 ### Nginx HTTPS + WebSocket support
 
 Quail runs plain HTTP on port 8000. If you terminate TLS with nginx, you must
@@ -94,6 +98,7 @@ To upgrade Quail to a newer version:
 ## Daily Operation
 
 - **Inbox access:** Access the web UI via the configured address (VPN or internal network). Message detail pages include HTML, plaintext, and attachments tabs. Admins can enable full HTML rendering in settings; when disabled, only plaintext is shown.
+- **Inbox controls:** The inbox toolbar includes theme, desktop notification, pause, and delete controls. Desktop notifications only fire when the browser tab is backgrounded and require user permission.
 - **Admin actions:** Use the Unlock workflow and enter the shared admin PIN to perform privileged actions such as changing settings, deleting messages or modifying retention policies. The admin settings page includes ingest visibility metrics (inbox/quarantine/dropped counts, ingest rate, and top sender domains) for the last 24 hours.
 - **Retention policy:** The purge timer automatically deletes inbox messages older than the configured retention period (default 30 days) and quarantined/dropped messages older than the quarantine retention period (default 3 days). Admins can optionally set per-domain quarantine overrides in the settings UI.
 - **Audit retention:** Admin audit entries are retained for 30 days and are purged alongside the regular retention job.

@@ -7,9 +7,12 @@ This roadmap outlines high‑level goals for the upcoming releases. Timeframes a
 ### Near Term
 
 - **DMARC Support:** Evaluate and implement DMARC validation for broader public deployments.
-- **WebSocket Inbox Updates:** Implement real-time inbox refresh per `docs/WEBSOCKET_INBOX_PLAN.md`.
 - **Operational Visibility:** Add lightweight service health/status and storage usage reporting.
 - **Documentation:** Maintain and update the documentation set (architecture, runbook, glossary, ADRs) as features evolve.
+
+### Recently Completed
+
+- **WebSocket Inbox Updates:** Real-time inbox refresh with polling fallback (shipped in 0.3.5).
 
 ### Longer Term
 

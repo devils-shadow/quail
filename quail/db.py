@@ -6,7 +6,6 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable
 
-
 SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS messages (
@@ -374,8 +373,7 @@ def clear_rate_limit_state(db_path: Path, source_ip: str) -> None:
 
 def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT
                 domain,
                 mode,
@@ -385,8 +383,7 @@ def list_domain_policies(db_path: Path) -> list[sqlite3.Row]:
                 updated_at
             FROM domain_policy
             ORDER BY domain ASC
-            """
-        ).fetchall()
+            """).fetchall()
     return list(rows)
 
 
@@ -483,13 +480,11 @@ def list_address_rules(db_path: Path, domain: str) -> list[sqlite3.Row]:
 
 def get_domain_quarantine_retention_overrides(db_path: Path) -> dict[str, int]:
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT domain, quarantine_retention_days
             FROM domain_policy
             WHERE quarantine_retention_days IS NOT NULL
-            """
-        ).fetchall()
+            """).fetchall()
     overrides: dict[str, int] = {}
     for row in rows:
         try:

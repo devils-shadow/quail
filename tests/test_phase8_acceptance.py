@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from quail import db, ingest, purge, settings
 from quail.web import app
+from tests.helpers import get_csrf_token
 
 pytestmark = [pytest.mark.integration, pytest.mark.api]
 
@@ -95,7 +96,12 @@ def _insert_message(
 
 
 def _unlock_admin(client: TestClient, pin: str = "1234") -> None:
-    response = client.post("/admin/unlock", data={"pin": pin}, follow_redirects=False)
+    csrf_token = get_csrf_token(client)
+    response = client.post(
+        "/admin/unlock",
+        data={"pin": pin, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
 
 
@@ -216,6 +222,7 @@ def test_acceptance_block_rules_default_to_quarantine(tmp_path, monkeypatch) -> 
 def test_acceptance_quarantine_restore(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client)
+        csrf_token = get_csrf_token(client)
         settings_obj = settings.get_settings()
         db.init_db(settings_obj.db_path)
         eml_path = settings_obj.eml_dir / "restore.eml"
@@ -234,7 +241,11 @@ def test_acceptance_quarantine_restore(tmp_path, monkeypatch) -> None:
         response = client.post(
             "/admin/quarantine/restore",
             data={"message_id": str(message_id)},
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
 
         assert response.status_code == 200
@@ -295,6 +306,7 @@ def test_acceptance_retention_purge(tmp_path, monkeypatch) -> None:
 def test_acceptance_admin_actions_logged(tmp_path, monkeypatch) -> None:
     with _build_client(tmp_path, monkeypatch) as client:
         _unlock_admin(client)
+        csrf_token = get_csrf_token(client)
         settings_obj = settings.get_settings()
 
         response = client.post(
@@ -304,7 +316,11 @@ def test_acceptance_admin_actions_logged(tmp_path, monkeypatch) -> None:
                 "mode": "OPEN",
                 "default_action": "INBOX",
             },
-            headers={"accept": "application/json", "x-admin-pin": "1234"},
+            headers={
+                "accept": "application/json",
+                "x-admin-pin": "1234",
+                "x-csrf-token": csrf_token,
+            },
         )
 
         assert response.status_code == 200

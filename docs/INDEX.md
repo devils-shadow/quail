@@ -4,12 +4,13 @@
 - [Deployment Modes](MODES.md): VPN VM mode vs reverse-proxy mode guidance.
 - [Runbook](RUNBOOK.md): Instructions for installing, configuring and operating Quail.
 - [Testing](TESTING.md): Test markers, local commands, and CI expectations.
+- [E2E Runbook](../tests/e2e/RUNBOOK.md): Local Playwright smoke tests, baselines, and perf capture.
 - [Glossary](GLOSSARY.md): Definitions of domain‑specific terms used in this project.
 - [Status](STATUS.md): Current state of the project, known issues and next milestones.
 - [Deprecations](DEPRECATIONS.md): Framework deprecations and migration notes.
 - [Roadmap](ROADMAP.md): Planned features and near‑term objectives.
 - [Spam Mitigation Plan](archive/QUAIL_SPAM_MITIGATION_PLAN.md): Historical plan for spam-mitigation admin controls.
-- [WebSocket Inbox Plan](WEBSOCKET_INBOX_PLAN.md): Design workbook for inbox WebSocket updates.
+- [WebSocket Inbox Plan (Archived)](archive/WEBSOCKET_INBOX_PLAN.md): Historical design workbook for inbox WebSocket updates.
 - [Quail 2.0 Spec](QUAIL_2_0_SPEC.md): Public internet deployment spec for auth, billing, and DMARC.
 - [Change Log](../CHANGELOG.md): A human‑readable history of changes.
 - [Todo List](../TODO.md): Outstanding tasks and areas requiring attention.

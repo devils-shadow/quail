@@ -61,9 +61,13 @@ A single command developer experience is provided via the Makefile (see `Makefil
 - `make venv` – create and populate a virtual environment.
 - `make lint` – run `ruff` to check lint and `black` for formatting.
 - `make test` – run the automated test suite with `pytest`.
-- `make run` – start the FastAPI application locally via `uvicorn`.
+- `make run` – start the FastAPI application locally via `uvicorn` (only in environments that do not use systemd).
+- `make css-bundle` – rebuild the bundled stylesheet after editing CSS partials.
 
 For CI, a GitHub Actions workflow runs linting and tests on each push and pull request. See `.github/workflows/ci.yml` for details.
+
+In the WSL/systemd environment described in `AGENTS.md`, **do not** run `uvicorn`
+manually. Restart the service with `sudo systemctl restart quail` instead.
 
 ---
 

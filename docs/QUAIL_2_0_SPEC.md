@@ -124,6 +124,9 @@ iterative implementation with minimal diff size per step.
 
 - Required for public internet deployment.
 - DMARC failure results in QUARANTINE (never DROP by default).
+- DNS failures/timeouts are treated as DMARC failures (quarantine).
+- Admins can configure a domain allowlist to bypass DMARC enforcement for
+  trusted senders; bypassed results are still recorded in message metadata.
 - DMARC pass allows normal ingest.
 - DMARC result is stored in message metadata and shown to admins.
 

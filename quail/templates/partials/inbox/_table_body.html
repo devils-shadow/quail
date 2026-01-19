@@ -1,0 +1,45 @@
+<table class="table inbox-table inbox-table--body">
+  <tbody>
+    {% if messages %}
+    {% set inbox_query = "" %}
+    {% if current_inbox %}
+    {% set inbox_query = "?inbox=" ~ (current_inbox | urlencode) %}
+    {% endif %}
+    {% for message in messages %}
+    {% set from_display = message.from_addr or "Unknown" %}
+    {% if "<" in from_display %}
+    {% set from_display = from_display.split("<")[0].strip().strip('"') %}
+    {% elif "@" in from_display %}
+    {% set from_display = from_display.split("@")[0] %}
+    {% endif %}
+    {% set to_display = message.envelope_rcpt or "" %}
+    {% if "@" in to_display %}
+    {% set to_display = to_display.split("@")[0] %}
+    {% endif %}
+    <tr data-message-id="{{ message.id }}" data-href="/message/{{ message.id }}{{ inbox_query }}">
+      <td class="from-col">
+        <input class="message-select" type="checkbox" aria-label="Select message" />
+        <span class="from-text">{{ from_display }}</span>
+        {% if is_admin and message.quarantined %}
+        <span class="badge">Quarantined</span>
+        {% endif %}
+      </td>
+      <td class="to-col">{{ to_display }}</td>
+      <td class="subject-col">
+        <a href="/message/{{ message.id }}{{ inbox_query }}">
+          {{ message.subject or "(No subject)" }}
+        </a>
+      </td>
+      <td class="received-col received-cell" data-received-at="{{ message.received_at }}">
+        {{ message.received_at }}
+      </td>
+    </tr>
+    {% endfor %}
+    {% set empty_state_style = "display: none;" %}
+    {% include "partials/inbox/_empty_state.html" %}
+    {% else %}
+    {% set empty_state_style = None %}
+    {% include "partials/inbox/_empty_state.html" %}
+    {% endif %}
+  </tbody>
+</table>

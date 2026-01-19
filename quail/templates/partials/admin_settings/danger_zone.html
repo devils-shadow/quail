@@ -1,0 +1,8 @@
+  {% call sections.card_section("Danger zone", card_class="danger-card") %}
+    <form method="post" action="/admin/messages/clear">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button class="button danger round btn" type="submit" onclick="return confirm('Delete all messages and attachments?')">
+        Delete all messages
+      </button>
+    </form>
+  {% endcall %}

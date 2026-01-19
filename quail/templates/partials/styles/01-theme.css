@@ -1,0 +1,54 @@
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --border: #d6d9e0;
+        --text: #0f1b2d;
+        --muted: #6b7280;
+        --primary: #1f5eff;
+        --primary-dark: #1a4ed8;
+        --sidebar-bg: #ffffff;
+        --sidebar-card: #f9fafc;
+        --sidebar-icon-bg: #f0f3ff;
+        --table-head: #f4f6fb;
+        --row-hover: #f8fafc;
+        --input-bg: #ffffff;
+        --button-secondary-bg: #ffffff;
+        --message-rich-bg: #ffffff;
+        --shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+        --radius: 14px;
+        --sidebar-width: 240px;
+        --admin-col: minmax(240px, 320px);
+        --page-header-top: 24px;
+        --page-header-gap: 24px;
+        --page-title-line: 34px;
+        --page-subtitle-line: 18px;
+        --page-subtitle-gap: 6px;
+        --page-header-row-height: calc(
+          var(--page-header-top) +
+          var(--page-title-line) +
+          var(--page-subtitle-gap) +
+          var(--page-subtitle-line) +
+          var(--page-header-gap)
+        );
+      }
+
+      [data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #2b2d31;
+        --card: #313338;
+        --border: #1f2023;
+        --text: #f2f3f5;
+        --muted: #b5bac1;
+        --primary: #5865f2;
+        --primary-dark: #6a78f6;
+        --sidebar-bg: #1e1f22;
+        --sidebar-card: #232428;
+        --sidebar-icon-bg: #2b2d31;
+        --table-head: #25262a;
+        --row-hover: #35373c;
+        --input-bg: #1e1f22;
+        --button-secondary-bg: #2b2d31;
+        --message-rich-bg: #2b2d31;
+        --shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+      }

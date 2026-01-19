@@ -1,0 +1,55 @@
+<div class="card domain-card">
+  <div class="card__header">
+    <h3 class="card__title">{{ policy.domain }}</h3>
+    <span class="card__meta">Last modified {{ policy.updated_at }}</span>
+  </div>
+  <div class="card__body">
+    <form method="post" action="/admin/domain-policies" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="domain" value="{{ policy.domain }}" />
+      <div class="form__grid">
+        {% call forms.field("Mode", "mode_" ~ policy_index) %}
+          <select class="field__control select" id="mode_{{ policy_index }}" name="mode">
+            {% for mode in domain_modes %}
+            <option value="{{ mode }}" {% if policy.mode == mode %}selected{% endif %}>{{ mode }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Default action", "action_" ~ policy_index) %}
+          <select class="field__control select" id="action_{{ policy_index }}" name="default_action">
+            {% for action in domain_actions %}
+            <option value="{{ action }}" {% if policy.default_action == action %}selected{% endif %}>
+              {{ action }}
+            </option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Quarantine retention override", "retention_" ~ policy_index) %}
+          <input
+            class="field__control input"
+            id="retention_{{ policy_index }}"
+            name="quarantine_retention_days"
+            type="number"
+            min="1"
+            value="{{ policy.quarantine_retention_days or '' }}"
+          />
+        {% endcall %}
+        {% call forms.field("Admin PIN", "pin_" ~ policy_index) %}
+          <input
+            class="field__control input"
+            id="pin_{{ policy_index }}"
+            name="admin_pin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            minlength="4"
+            maxlength="9"
+          />
+        {% endcall %}
+      </div>
+      <div class="card__actions">
+        <button class="button round btn" type="submit">Save domain</button>
+      </div>
+    </form>
+  </div>
+</div>

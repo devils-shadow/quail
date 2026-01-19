@@ -1,40 +1,4 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="admin-unlock-page">
-  <div class="admin-unlock-stack card admin-unlock-card">
-    <div class="admin-unlock-header">Admin Unlock</div>
-    {% if error == "invalid" %}
-    <p>Invalid PIN. Try again.</p>
-    {% elif error == "rate_limited" %}
-    <p>Too many attempts. Please wait a few minutes.</p>
-    {% elif error == "pin_length" %}
-    <p>PIN must be 4-9 digits.</p>
-    {% elif error == "pin_format" %}
-    <p>PIN must contain digits only.</p>
-    {% endif %}
-    {% if not pin_configured %}
-    <p>Admin PIN is not configured yet.</p>
-    {% endif %}
-    <form method="post" action="/admin/unlock" class="admin-unlock-form">
-      <input
-        id="pin"
-        name="pin"
-        type="password"
-        autocomplete="current-password"
-        inputmode="numeric"
-        pattern="[0-9]*"
-        minlength="4"
-        maxlength="9"
-        required
-        class="input"
-        placeholder="Admin PIN"
-        aria-label="Admin PIN"
-      />
-      <div class="admin-unlock-actions">
-        <button class="button" type="submit">🔒 Unlock</button>
-        <a class="button secondary" href="/inbox">Back to Inbox</a>
-      </div>
-    </form>
-  </div>
-</div>
+{% include "partials/admin_unlock_content.html" %}
 {% endblock %}

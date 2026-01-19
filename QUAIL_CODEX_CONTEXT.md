@@ -93,7 +93,7 @@ No SaaS. No external dependencies. One operator. Low volume.
 
 ### HTML
 - Default: plaintext only
-- Optional full HTML view (admin-controlled) rendered in a sandboxed iframe
+- Optional full HTML view (admin-controlled) rendered in a sandboxed iframe (no sanitization)
 - Plaintext remains available alongside HTML
 
 ---
@@ -139,7 +139,7 @@ Admin-only actions:
 - Never send email
 - Never execute attachment content
 - Prevent path traversal in filenames
-- Sanitize HTML strictly if enabled
+- HTML is rendered as sent inside a sandboxed iframe (no sanitization) to preserve layout fidelity
 - UI must not bind to `0.0.0.0` by default
 - Prefer binding to localhost + VPN firewall rules
 - Do not log full email bodies
