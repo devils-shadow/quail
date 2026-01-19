@@ -6,7 +6,6 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable
 
-
 SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS messages (
