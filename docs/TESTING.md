@@ -83,3 +83,4 @@ make css-bundle-restart
 
 The test suite includes a bundle guard (`tests/test_css_bundle.py`) that fails
 if `quail/static/quail.css` is stale or missing.
+`make test` rebuilds the bundle automatically if the partials have changed.

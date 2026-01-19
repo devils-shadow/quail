@@ -85,6 +85,7 @@ To upgrade an existing install:
   commands, and CI coverage.
 - If you edit CSS partials under `quail/templates/partials/styles/`, rebuild
   the bundled stylesheet with `make css-bundle` (or `make css-bundle-restart`).
+  `make test` also rebuilds the bundle if the partials changed.
 
 ## 🧭 Deprecations
 
