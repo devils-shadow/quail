@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from argon2 import PasswordHasher
 
-
 _PASSWORD_HASHER = PasswordHasher()
 
 

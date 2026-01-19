@@ -41,22 +41,16 @@ def main() -> int:
             body = response.body()
             html_bytes = len(body)
 
-        nav_entry = page.evaluate(
-            "performance.getEntriesByType('navigation')[0] || null"
-        )
+        nav_entry = page.evaluate("performance.getEntriesByType('navigation')[0] || null")
         resource_count = page.evaluate("performance.getEntriesByType('resource').length")
-        ws_enabled = page.evaluate(
-            "typeof wsEnabled === 'undefined' ? null : Boolean(wsEnabled)"
-        )
+        ws_enabled = page.evaluate("typeof wsEnabled === 'undefined' ? null : Boolean(wsEnabled)")
 
         result = {
             "url": f"{base_url}/inbox",
             "html_bytes": html_bytes,
             "request_count": len(requests),
             "resource_count": resource_count,
-            "domcontentloaded_ms": nav_entry.get("domContentLoadedEventEnd")
-            if nav_entry
-            else None,
+            "domcontentloaded_ms": nav_entry.get("domContentLoadedEventEnd") if nav_entry else None,
             "load_ms": nav_entry.get("loadEventEnd") if nav_entry else None,
             "ws_enabled": ws_enabled,
         }

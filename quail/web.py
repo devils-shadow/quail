@@ -45,7 +45,6 @@ from quail.logging_config import configure_logging
 from quail.security import hash_pin, verify_pin
 from quail.settings import get_settings
 
-
 ADMIN_PIN_HASH_KEY = "admin_pin_hash"
 RETENTION_DAYS_KEY = "retention_days"
 QUARANTINE_RETENTION_DAYS_KEY = "quarantine_retention_days"
@@ -810,14 +809,12 @@ def _get_ingest_metrics(db_path: Path, now: datetime | None = None) -> dict[str,
         inbox_row = conn.execute(
             "SELECT COUNT(*) AS count FROM messages WHERE status = 'INBOX' AND quarantined = 0"
         ).fetchone()
-        quarantine_row = conn.execute(
-            """
+        quarantine_row = conn.execute("""
             SELECT COUNT(*) AS count
             FROM messages
             WHERE (status = 'QUARANTINE' OR quarantined = 1)
               AND status != 'DROP'
-            """
-        ).fetchone()
+            """).fetchone()
         dropped_row = conn.execute(
             "SELECT COUNT(*) AS count FROM messages WHERE status = 'DROP' AND received_at >= ?",
             (cutoff.isoformat(),),

@@ -46,9 +46,7 @@ def test_message_tabs_switch(page, base_url) -> None:
     attachments_tab = page.locator("[data-tab='attachments']")
     attachments_tab.click()
     expect(attachments_tab).to_have_attribute("aria-selected", "true")
-    expect(page.locator("[data-tab-panel='attachments']")).to_have_class(
-        re.compile(r"active")
-    )
+    expect(page.locator("[data-tab-panel='attachments']")).to_have_class(re.compile(r"active"))
 
     text_tab = page.locator("[data-tab='text']")
     text_tab.click()
@@ -130,9 +128,7 @@ def test_trash_hides_selected_rows(page, base_url) -> None:
     row.locator("input.message-select").check()
     page.locator("#trash-button").click()
     expect(row).to_have_class(re.compile(r"row-hidden"))
-    hidden_ids = page.evaluate(
-        "JSON.parse(sessionStorage.getItem('quailHiddenMessages') || '[]')"
-    )
+    hidden_ids = page.evaluate("JSON.parse(sessionStorage.getItem('quailHiddenMessages') || '[]')")
     assert message_id in hidden_ids
 
 
@@ -144,9 +140,7 @@ def test_received_cell_formatting(page, base_url) -> None:
     assert display_value
 
     if raw_value:
-        parsed_ok = page.evaluate(
-            "(value) => !Number.isNaN(Date.parse(value))", raw_value
-        )
+        parsed_ok = page.evaluate("(value) => !Number.isNaN(Date.parse(value))", raw_value)
         if parsed_ok:
             assert cell.get_attribute("title")
 
