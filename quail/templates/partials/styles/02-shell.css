@@ -262,16 +262,22 @@
 
       body.list-view .list-scroll-card--inbox .list-scroll-head {
         background: var(--table-head);
-        padding-right: 8px;
       }
 
       body.list-view .list-scroll-card--inbox .list-scroll-body {
         flex: 1;
         min-height: 0;
         overflow: auto;
+        border-radius: 0 0 var(--radius) var(--radius);
+      }
+
+      body.list-view .list-scroll-card--inbox.list-scroll-card--scrollable .list-scroll-head {
+        padding-right: 8px;
+      }
+
+      body.list-view .list-scroll-card--inbox.list-scroll-card--scrollable .list-scroll-body {
         scrollbar-gutter: stable;
         padding-right: 8px;
-        border-radius: 0 0 var(--radius) var(--radius);
       }
 
       body.list-view .list-scroll-card thead th {
@@ -335,4 +341,3 @@
         flex: 0 1 auto;
         max-height: 100%;
       }
-

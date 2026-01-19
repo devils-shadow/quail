@@ -18,6 +18,8 @@ const isAdmin = Boolean(config.isAdmin);
 const tableBody = document.querySelector(".inbox-table--body tbody");
 let rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
 let emptyRow = document.querySelector("[data-empty-state]");
+const listScrollBody = document.querySelector(".list-scroll-card--inbox .list-scroll-body");
+const listScrollCard = document.querySelector(".list-scroll-card--inbox");
 const trashButton = document.getElementById("trash-button");
 const pauseButton = document.getElementById("pause-button");
 let messageCache = new Map();
@@ -42,6 +44,14 @@ const notifyCooldownMs = 5000;
 const resetRows = () => {
   rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
   emptyRow = document.querySelector("[data-empty-state]");
+};
+
+const updateScrollCardState = () => {
+  if (!listScrollBody || !listScrollCard) {
+    return;
+  }
+  const hasScroll = listScrollBody.scrollHeight > listScrollBody.clientHeight + 1;
+  listScrollCard.classList.toggle("list-scroll-card--scrollable", hasScroll);
 };
 
 const readHidden = () => {
@@ -397,6 +407,7 @@ const renderMessages = (messages) => {
   resetRows();
   applyHidden();
   applyReceivedFormatting();
+  updateScrollCardState();
 };
 
 const pad2 = (value) => String(value).padStart(2, "0");
@@ -405,6 +416,11 @@ const formatAbsoluteTimestamp = (date) =>
   `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(
     date.getSeconds()
   )} ${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
+
+const formatAbsoluteTimestampShort = (date) =>
+  `${pad2(date.getHours())}:${pad2(date.getMinutes())} ${pad2(
+    date.getDate()
+  )}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
 
 const parseReceivedDate = (rawValue) => {
   const parsed = new Date(rawValue);
@@ -423,7 +439,7 @@ const formatReceivedAt = (rawValue) => {
   let diffMs = now.getTime() - parsed.getTime();
   const clockSkewMs = 60000;
   if (diffMs < -clockSkewMs) {
-    return formatAbsoluteTimestamp(parsed);
+    return formatAbsoluteTimestampShort(parsed);
   }
   if (diffMs < 0) {
     diffMs = 0;
@@ -447,7 +463,7 @@ const formatReceivedAt = (rawValue) => {
   if (days < 7) {
     return `${days} ${days === 1 ? "day" : "days"} ago`;
   }
-  return formatAbsoluteTimestamp(parsed);
+  return formatAbsoluteTimestampShort(parsed);
 };
 
 const applyReceivedFormatting = () => {
@@ -869,4 +885,7 @@ if (document.hidden) {
 
 applyHidden();
 applyReceivedFormatting();
+updateScrollCardState();
 startReceivedTicker();
+
+window.addEventListener("resize", updateScrollCardState);
