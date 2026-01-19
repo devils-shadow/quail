@@ -4,17 +4,35 @@ All notable changes to this project will be documented in this file. This projec
 
 ## [Unreleased]
 
-- install.sh now initializes the admin PIN from `QUAIL_ADMIN_PIN` when unset.
+- Nothing yet.
+
+## [0.4.0] - 2026-01-19
+
+### Added
+
+- Playwright-based E2E smoke tests, visual baselines, and perf capture with a runbook.
+- CSS bundle workflow with cache-busted `quail.css` and Makefile targets for rebuilds.
+- Static inbox and layout JS files extracted from templates.
+- Admin UI CSRF tokens for state-changing requests.
+- Desktop notifications toggle and dynamic tab titles for inbox status.
+
+### Changed
+
+- Inbox, message view, admin settings, and quarantine templates are split into partials.
+- Layout shell and admin form patterns moved into macros/partials.
+- `make test` now rebuilds the CSS bundle when partials change.
+- install.sh initializes the admin PIN from `QUAIL_ADMIN_PIN` when unset.
 - upgrade.sh can reset the admin PIN when `QUAIL_RESET_PIN=true`.
-- Admin UI now requires CSRF tokens for state-changing requests.
 - Admin session cookies are marked Secure when HTTPS is detected (including `X-Forwarded-Proto`).
-- WebSocket inbox loop retries after unexpected errors to keep live updates running.
-- Attachment downloads now return 404 when files are missing on disk.
-- Docs clarify that HTML is rendered as sent inside a sandboxed iframe (no sanitization).
-- Inbox list pages now use internal scrolling with sticky headers and aligned list layouts.
+- Inbox list pages use internal scrolling with sticky headers and aligned list layouts.
 - Inbox copy updated (Received Mail title, QA subtitle, filter placeholder) with new empty-state messaging.
-- Inbox UI adds a desktop notifications toggle plus dynamic tab titles for new mail and reconnecting.
 - WebSocket inbox adds app-level ping/pong keepalive with jittered reconnect backoff.
+- WebSocket inbox loop retries after unexpected errors to keep live updates running.
+- Docs clarify that HTML is rendered as sent inside a sandboxed iframe (no sanitization).
+
+### Fixed
+
+- Attachment downloads return 404 when files are missing on disk.
 
 ## [0.3.5] - 2026-01-14
 
