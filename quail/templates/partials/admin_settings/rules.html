@@ -1,0 +1,26 @@
+  <section class="section">
+    <div class="card">
+      <div class="card__header">
+        <h2 class="card__title">Address/content rules</h2>
+        <p class="card__subtitle">Manage allow/block rules for a domain. Changes apply only to new ingests.</p>
+      </div>
+      <div class="card__body">
+        {% include "partials/admin_settings/rules/_domain_form.html" %}
+
+        {% if rules_domain %}
+          {% if rules %}
+          {% include "partials/admin_settings/rules/_table.html" %}
+          {% else %}
+          {% include "partials/admin_settings/rules/_empty.html" %}
+          {% endif %}
+
+          <div class="form-split">
+            {% include "partials/admin_settings/rules/_add.html" %}
+            {% include "partials/admin_settings/rules/_test.html" %}
+          </div>
+        {% else %}
+        {% include "partials/admin_settings/rules/_domain_empty.html" %}
+        {% endif %}
+      </div>
+    </div>
+  </section>

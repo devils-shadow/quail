@@ -1,0 +1,78 @@
+  {% call sections.card_section(
+    "Core settings",
+    "Changes apply only to new ingests.",
+    card_class="card--primary"
+  ) %}
+    <form method="post" action="/admin/settings" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="form__grid">
+        {% call forms.field(
+          "Allowed attachments",
+          "allowed_mime_types",
+          label_class="field__label tooltip-label",
+          label_attrs='data-tip="Comma-separated MIME types for attachments that are allowed (example: application/pdf,image/png). Messages with other attachment types are quarantined."'
+        ) %}
+          <input
+            class="field__control input"
+            id="allowed_mime_types"
+            name="allowed_mime_types"
+            type="text"
+            value="{{ allowed_mime_types }}"
+          />
+        {% endcall %}
+        {% call forms.field("Retention days", "retention_days") %}
+          <input
+            class="field__control input"
+            id="retention_days"
+            name="retention_days"
+            type="number"
+            min="1"
+            value="{{ retention_days }}"
+          />
+        {% endcall %}
+        {% call forms.field("Quarantine retention days", "quarantine_retention_days") %}
+          <input
+            class="field__control input"
+            id="quarantine_retention_days"
+            name="quarantine_retention_days"
+            type="number"
+            min="1"
+            value="{{ quarantine_retention_days }}"
+          />
+        {% endcall %}
+        {% call forms.field("Update admin PIN", "admin_pin") %}
+          <input
+            class="field__control input"
+            id="admin_pin"
+            name="admin_pin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            minlength="4"
+            maxlength="9"
+          />
+        {% endcall %}
+        <div class="checkrow">
+          <input
+            id="allow_html"
+            name="allow_html"
+            type="checkbox"
+            value="true"
+            {% if allow_html %}checked{% endif %}
+          />
+          <div>
+            <label
+              class="checkrow__label tooltip-label"
+              for="allow_html"
+              data-tip="Enables full HTML rendering in the message view. When disabled, only plaintext is shown."
+            >
+              Allow rich HTML
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="card__actions">
+        <button class="button round btn" type="submit">Save core settings</button>
+      </div>
+    </form>
+  {% endcall %}

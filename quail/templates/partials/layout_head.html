@@ -1,0 +1,29 @@
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Quail</title>
+    <link rel="icon" href="/static/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <script>
+      (() => {
+        const storageKey = "quailTheme";
+        const stored = window.localStorage?.getItem(storageKey);
+        const prefersDark =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = stored || (prefersDark ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <style>
+      {% include "partials/styles/01-theme.css" %}
+      {% include "partials/styles/02-shell.css" %}
+      {% include "partials/styles/03-page.css" %}
+      {% include "partials/styles/04-admin-components.css" %}
+      {% include "partials/styles/05-inbox-message.css" %}
+      {% include "partials/styles/06-responsive.css" %}
+    </style>

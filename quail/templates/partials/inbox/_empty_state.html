@@ -1,0 +1,13 @@
+<tr data-empty-state{% if empty_state_style %} style="{{ empty_state_style }}"{% endif %}>
+  <td colspan="3">
+    <div class="empty-state">
+      {% if current_inbox %}
+      <div><strong>Currently filtered inbox has no mail.</strong></div>
+      <div class="row-muted" aria-hidden="true">&nbsp;</div>
+      {% else %}
+      <div><strong>This is an ephemeral inbox.</strong></div>
+      <div class="row-muted">Messages are only shown after you apply a filter.</div>
+      {% endif %}
+    </div>
+  </td>
+</tr>

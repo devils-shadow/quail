@@ -1,0 +1,19 @@
+{% macro card_section(title, subtitle=None, card_class=None, section_class="section", with_body=True) %}
+<section class="{{ section_class }}">
+  <div class="card{% if card_class %} {{ card_class }}{% endif %}">
+    <div class="card__header">
+      <h2 class="card__title">{{ title }}</h2>
+      {% if subtitle %}
+      <p class="card__subtitle">{{ subtitle }}</p>
+      {% endif %}
+    </div>
+    {% if with_body %}
+    <div class="card__body">
+      {{ caller() }}
+    </div>
+    {% else %}
+    {{ caller() }}
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}

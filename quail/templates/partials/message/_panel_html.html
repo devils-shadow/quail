@@ -1,0 +1,12 @@
+<section class="tab-panel active" data-tab-panel="html">
+  <div class="message-html message-html--full">
+    <iframe
+      class="message-html-frame"
+      title="HTML preview"
+      sandbox="allow-same-origin"
+      referrerpolicy="no-referrer"
+      {% if is_minimal_html %}data-minimal="true"{% endif %}
+      srcdoc="{{ html_srcdoc | e }}"
+    ></iframe>
+  </div>
+</section>

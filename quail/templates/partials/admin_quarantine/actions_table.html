@@ -1,0 +1,13 @@
+
+
+  <form method="post" action="/admin/quarantine/restore" class="list-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="domain" value="{{ domain_filter }}" />
+    <input type="hidden" name="sender_domain" value="{{ sender_domain_filter }}" />
+    <input type="hidden" name="recipient_localpart" value="{{ recipient_localpart_filter }}" />
+    <input type="hidden" name="start_date" value="{{ start_date_filter }}" />
+    <input type="hidden" name="end_date" value="{{ end_date_filter }}" />
+    {% include "partials/admin_quarantine/_actions_card.html" %}
+
+    {% include "partials/admin_quarantine/_table_wrapper.html" %}
+  </form>

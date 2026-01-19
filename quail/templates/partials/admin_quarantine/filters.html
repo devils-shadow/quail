@@ -1,0 +1,59 @@
+
+
+  <form method="get" action="/admin/quarantine" class="card quarantine-filters">
+    <div class="card__header">
+      <h2 class="card__title">Filters</h2>
+    </div>
+    <div class="card__body">
+      <div class="form__grid">
+        {% call forms.field("Recipient domain", "domain_filter") %}
+          <input
+            id="domain_filter"
+            class="field__control input"
+            name="domain"
+            type="text"
+            value="{{ domain_filter }}"
+          />
+        {% endcall %}
+        {% call forms.field("Sender domain", "sender_domain_filter") %}
+          <input
+            id="sender_domain_filter"
+            class="field__control input"
+            name="sender_domain"
+            type="text"
+            value="{{ sender_domain_filter }}"
+          />
+        {% endcall %}
+        {% call forms.field("Recipient local-part", "recipient_localpart_filter") %}
+          <input
+            id="recipient_localpart_filter"
+            class="field__control input"
+            name="recipient_localpart"
+            type="text"
+            value="{{ recipient_localpart_filter }}"
+          />
+        {% endcall %}
+        {% call forms.field("Start date", "start_date_filter") %}
+          <input
+            id="start_date_filter"
+            class="field__control input"
+            name="start_date"
+            type="date"
+            value="{{ start_date_filter }}"
+          />
+        {% endcall %}
+        {% call forms.field("End date", "end_date_filter") %}
+          <input
+            id="end_date_filter"
+            class="field__control input"
+            name="end_date"
+            type="date"
+            value="{{ end_date_filter }}"
+          />
+        {% endcall %}
+      </div>
+      <div class="card__actions">
+        <button class="button" type="submit">Apply filters</button>
+      </div>
+    </div>
+  </form>

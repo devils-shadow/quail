@@ -1,0 +1,14 @@
+  <section class="section">
+    <div class="section-header">
+      <h2>Domain policies</h2>
+      <p class="section-subtitle">Changes apply only to new ingests.</p>
+    </div>
+    {% if domain_policies %}
+      {% for policy in domain_policies %}
+      {% set policy_index = loop.index %}
+      {% include "partials/admin_settings/domain_policies/_card.html" %}
+      {% endfor %}
+    {% else %}
+    {% include "partials/admin_settings/domain_policies/_empty.html" %}
+    {% endif %}
+  </section>

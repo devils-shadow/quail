@@ -1,0 +1,15 @@
+<div class="card tabs-container" data-message-tabs>
+  {% include "partials/message/_tabs.html" %}
+  <div class="message-body tab-panels">
+    {% if allow_html and html_srcdoc %}
+    {% include "partials/message/_panel_html.html" %}
+    {% set text_panel_active = false %}
+    {% include "partials/message/_panel_text.html" %}
+    {% else %}
+    {% set text_panel_active = true %}
+    {% include "partials/message/_panel_text.html" %}
+    {% endif %}
+
+    {% include "partials/message/_panel_attachments.html" %}
+  </div>
+</div>

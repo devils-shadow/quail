@@ -1,0 +1,56 @@
+      @media (max-width: 960px) {
+        .app-shell {
+          flex-direction: column;
+        }
+
+        .sidebar {
+          width: 100%;
+          display: flex;
+          flex-direction: row;
+          flex-wrap: wrap;
+          padding: 24px 18px;
+          gap: 12px;
+          height: auto;
+        }
+
+        .sidebar-top,
+        .sidebar-bottom {
+          padding: 0;
+        }
+
+        .main-content {
+          padding: 24px;
+        }
+
+        .page-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .toolbar {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        body.inbox-view .app-shell {
+          display: flex;
+          flex-direction: column;
+        }
+
+        body.inbox-view .main-content {
+          display: block;
+          padding: 24px;
+        }
+
+        body.inbox-view .list-page {
+          display: block;
+        }
+
+        body.inbox-view .page-header {
+          padding: 0;
+        }
+
+        body.inbox-view .list-body {
+          padding: 0 0 24px;
+        }
+      }

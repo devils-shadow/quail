@@ -1,0 +1,63 @@
+<div class="card admin-subcard">
+  <div class="card__header">
+    <h3 class="card__title">Add rule</h3>
+  </div>
+  <div class="card__body">
+    <form method="post" action="/admin/rules" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="domain" value="{{ rules_domain }}" />
+      <div class="form__grid">
+        {% call forms.field("Type", "rule_type_new") %}
+          <select class="field__control select" id="rule_type_new" name="rule_type">
+            {% for rule_type in rule_types %}
+            <option value="{{ rule_type }}">{{ rule_type }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Match field", "match_field_new") %}
+          <select class="field__control select" id="match_field_new" name="match_field">
+            {% for field in match_fields %}
+            <option value="{{ field }}">{{ field }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Pattern", "pattern_new") %}
+          <input class="field__control input" id="pattern_new" name="pattern" type="text" />
+        {% endcall %}
+        {% call forms.field("Action", "action_new") %}
+          <select class="field__control select" id="action_new" name="action">
+            {% for action in rule_actions %}
+            <option value="{{ action }}">{{ action }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Priority", "priority_new") %}
+          <input class="field__control input" id="priority_new" name="priority" type="number" min="0" value="0" />
+        {% endcall %}
+        {% call forms.field("Note", "note_new") %}
+          <input class="field__control input" id="note_new" name="note" type="text" />
+        {% endcall %}
+        <div class="checkrow">
+          <input type="hidden" name="enabled" value="0" />
+          <input id="enabled_new" name="enabled" type="checkbox" value="1" checked />
+          <label class="checkrow__label" for="enabled_new">Enabled</label>
+        </div>
+        {% call forms.field("Admin PIN", "admin_pin_new") %}
+          <input
+            class="field__control input"
+            id="admin_pin_new"
+            name="admin_pin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            minlength="4"
+            maxlength="9"
+          />
+        {% endcall %}
+      </div>
+      <div class="card__actions">
+        <button class="button round btn" type="submit">Add rule</button>
+      </div>
+    </form>
+  </div>
+</div>

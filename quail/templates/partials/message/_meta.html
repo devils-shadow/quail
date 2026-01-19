@@ -1,0 +1,39 @@
+<details class="card message-details" open>
+  <summary class="message-details__summary">
+    <span>Message details</span>
+    <span class="row-muted">To {{ message.envelope_rcpt }}</span>
+    <span class="message-details__actions">
+      {% if is_admin %}
+      <form method="post" action="/admin/message/{{ message.id }}/delete">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button class="button secondary round" type="submit">Delete</button>
+      </form>
+      {% endif %}
+      <a class="button secondary round" href="/inbox{{ inbox_query }}">Back to Inbox</a>
+    </span>
+  </summary>
+  <div class="details-grid compact three-col">
+    <dl>
+      <dt>To</dt>
+      <dd>{{ message.envelope_rcpt }}</dd>
+      <dt>From</dt>
+      <dd>{{ message.from_addr or "Unknown" }}</dd>
+    </dl>
+    <dl>
+      <dt>Date</dt>
+      <dd>{{ message.date or "Unknown" }}</dd>
+      <dt>Received</dt>
+      <dd>{{ message.received_at }}</dd>
+    </dl>
+    <dl>
+      <dt>Message ID</dt>
+      <dd>{{ message.message_id or "Unknown" }}</dd>
+      <dt>Size</dt>
+      <dd>{{ message.size_bytes }} bytes</dd>
+      {% if is_admin %}
+      <dt>Quarantined</dt>
+      <dd>{{ "Yes" if message.quarantined else "No" }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+</details>

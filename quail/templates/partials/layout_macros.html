@@ -1,0 +1,4 @@
+{% macro app_shell(show_sidebar=True) %}
+  {% set shell_content = caller() %}
+  {% include "partials/layout_app_shell.html" %}
+{% endmacro %}

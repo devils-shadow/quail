@@ -1,0 +1,50 @@
+
+
+  {% call sections.card_section("Add domain policy", card_class="card--secondary") %}
+    <form method="post" action="/admin/domain-policies" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="form__grid">
+        {% call forms.field("Domain", "domain_policy_domain") %}
+          <input class="field__control input" id="domain_policy_domain" name="domain" type="text" />
+        {% endcall %}
+        {% call forms.field("Mode", "domain_policy_mode") %}
+          <select class="field__control select" id="domain_policy_mode" name="mode">
+            {% for mode in domain_modes %}
+            <option value="{{ mode }}">{{ mode }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Default action", "domain_policy_action") %}
+          <select class="field__control select" id="domain_policy_action" name="default_action">
+            {% for action in domain_actions %}
+            <option value="{{ action }}">{{ action }}</option>
+            {% endfor %}
+          </select>
+        {% endcall %}
+        {% call forms.field("Quarantine retention override", "domain_policy_retention") %}
+          <input
+            class="field__control input"
+            id="domain_policy_retention"
+            name="quarantine_retention_days"
+            type="number"
+            min="1"
+          />
+        {% endcall %}
+        {% call forms.field("Admin PIN", "domain_policy_pin") %}
+          <input
+            class="field__control input"
+            id="domain_policy_pin"
+            name="admin_pin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            minlength="4"
+            maxlength="9"
+          />
+        {% endcall %}
+      </div>
+      <div class="card__actions">
+        <button class="button round btn" type="submit">Add domain policy</button>
+      </div>
+    </form>
+  {% endcall %}

@@ -1,0 +1,53 @@
+  <div class="alert-stack">
+    {% if request.query_params.get("updated") %}
+    <div class="alert success">Settings updated.</div>
+    {% endif %}
+    {% if request.query_params.get("cleared") %}
+    <div class="alert success">All messages deleted.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "retention" %}
+    <div class="alert error">Retention must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "quarantine_retention" %}
+    <div class="alert error">Quarantine retention must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "pin_length" %}
+    <div class="alert error">Admin PIN must be 4-9 digits.</div>
+    {% endif %}
+    {% if request.query_params.get("error") == "pin_format" %}
+    <div class="alert error">Admin PIN must contain digits only.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_saved") %}
+    <div class="alert success">Domain policy saved for {{ request.query_params.get("domain_saved") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "pin" %}
+    <div class="alert error">Admin PIN verification is required for domain policy changes.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "domain" %}
+    <div class="alert error">Domain name is required to update a policy.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "mode" %}
+    <div class="alert error">Domain mode must be one of: {{ domain_modes | join(", ") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "action" %}
+    <div class="alert error">Default action must be one of: {{ domain_actions | join(", ") }}.</div>
+    {% endif %}
+    {% if request.query_params.get("domain_error") == "retention" %}
+    <div class="alert error">Quarantine retention override must be a positive number.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_saved") %}
+    <div class="alert success">Rule saved.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_deleted") %}
+    <div class="alert success">Rule deleted.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_error") %}
+    <div class="alert error">Rule error: {{ request.query_params.get("rules_error") }}</div>
+    {% endif %}
+    {% if request.query_params.get("rules_test") == "matched" %}
+    <div class="alert success">Rule test matched.</div>
+    {% endif %}
+    {% if request.query_params.get("rules_test") == "no_match" %}
+    <div class="alert warn">Rule test did not match.</div>
+    {% endif %}
+  </div>

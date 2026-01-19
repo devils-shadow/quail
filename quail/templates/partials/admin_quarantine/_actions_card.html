@@ -1,0 +1,52 @@
+<div class="card quarantine-actions-card">
+  <div class="card__header">
+    <h2 class="card__title">Actions</h2>
+  </div>
+  <div class="card__body">
+    <div class="form__grid">
+      {% call forms.field("Admin PIN", "admin_pin_quarantine") %}
+        <input
+          id="admin_pin_quarantine"
+          class="field__control input"
+          name="admin_pin"
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          minlength="4"
+          maxlength="9"
+        />
+      {% endcall %}
+      {% call forms.field("Rule match field", "match_field_quarantine") %}
+        <select id="match_field_quarantine" class="field__control select" name="match_field">
+          {% for field in match_fields %}
+          <option value="{{ field }}">{{ field }}</option>
+          {% endfor %}
+        </select>
+      {% endcall %}
+    </div>
+    <div class="card__actions">
+      <button class="button" type="submit">Restore</button>
+      <button class="button secondary" type="submit" formaction="/admin/quarantine/delete">
+        Delete
+      </button>
+      <button
+        class="button secondary"
+        type="submit"
+        formaction="/admin/quarantine/rule-from-selection"
+        name="rule_type"
+        value="ALLOW"
+      >
+        Create ALLOW rule
+      </button>
+      <button
+        class="button secondary"
+        type="submit"
+        formaction="/admin/quarantine/rule-from-selection"
+        name="rule_type"
+        value="BLOCK"
+      >
+        Create BLOCK rule
+      </button>
+    </div>
+  </div>
+</div>

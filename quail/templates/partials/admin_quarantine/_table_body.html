@@ -1,0 +1,22 @@
+<tbody>
+  {% if messages %}
+  {% for message in messages %}
+  <tr>
+    <td>
+      <input class="message-select" type="checkbox" name="message_id" value="{{ message.id }}" />
+      <div>{{ message.envelope_rcpt }}</div>
+    </td>
+    <td>{{ message.from_addr or "Unknown" }}</td>
+    <td>{{ message.subject or "(No subject)" }}</td>
+    <td>{{ message.quarantine_reason or "—" }}</td>
+    <td>{{ message.received_at }}</td>
+  </tr>
+  {% endfor %}
+  {% else %}
+  <tr>
+    <td colspan="5">
+      <div class="empty-state">No quarantined messages match the filters.</div>
+    </td>
+  </tr>
+  {% endif %}
+</tbody>
