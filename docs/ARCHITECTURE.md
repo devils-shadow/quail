@@ -12,6 +12,17 @@ A single Python **FastAPI** service provides both the ingest entrypoint and the 
 
 Inbox list updates use a WebSocket channel with app-level ping/pong keepalive and polling fallback to preserve live refresh behavior.
 
+## UI Rendering and Assets
+
+The UI is rendered with Jinja templates in `quail/templates/`, with page-level
+templates (`layout.html`, `inbox.html`, `message.html`, admin views) composed
+from partials under `quail/templates/partials/`.
+
+CSS is bundled into `quail/static/quail.css` from the partials under
+`quail/templates/partials/styles/` and served as a static asset with a cache
+buster derived from the bundle mtime. The theme bootstrap script remains
+inline in the layout head to avoid flashes of incorrect theme on load.
+
 ## Ingest Pipeline
 
 The ingest entrypoint stores the full raw email as a `.eml` file and extracts metadata including recipient, from, subject, date, message‑ID and size【104907567664902†L60-L69】. Metadata is inserted into a SQLite database【104907567664902†L62-L70】. Attachments are allowed only for specific MIME types (default **PDF**), configurable via the admin UI【104907567664902†L71-L74】. Messages with disallowed attachments are quarantined and hidden from non‑admin users【104907567664902†L71-L78】. The ingest pipeline applies deterministic domain policies and address/content rules to set each message status (INBOX, QUARANTINE, or DROP) and stores decision metadata alongside the message.

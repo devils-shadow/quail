@@ -83,6 +83,8 @@ To upgrade an existing install:
 
 - See the [testing guide](docs/TESTING.md) for pytest markers, standard
   commands, and CI coverage.
+- If you edit CSS partials under `quail/templates/partials/styles/`, rebuild
+  the bundled stylesheet with `make css-bundle` (or `make css-bundle-restart`).
 
 ## 🧭 Deprecations
 

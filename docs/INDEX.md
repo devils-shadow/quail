@@ -4,6 +4,7 @@
 - [Deployment Modes](MODES.md): VPN VM mode vs reverse-proxy mode guidance.
 - [Runbook](RUNBOOK.md): Instructions for installing, configuring and operating Quail.
 - [Testing](TESTING.md): Test markers, local commands, and CI expectations.
+- [E2E Runbook](../tests/e2e/RUNBOOK.md): Local Playwright smoke tests, baselines, and perf capture.
 - [Glossary](GLOSSARY.md): Definitions of domain‑specific terms used in this project.
 - [Status](STATUS.md): Current state of the project, known issues and next milestones.
 - [Deprecations](DEPRECATIONS.md): Framework deprecations and migration notes.
