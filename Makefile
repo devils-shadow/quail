@@ -1,4 +1,4 @@
-.PHONY: venv lint format test run
+.PHONY: venv lint format test run css-bundle css-bundle-restart
 
 venv:
 	python3 -m venv .venv
@@ -16,3 +16,15 @@ test:
 
 run:
 	.venv/bin/uvicorn quail.web:app --reload
+
+css-bundle:
+	cat quail/templates/partials/styles/01-theme.css \
+		quail/templates/partials/styles/02-shell.css \
+		quail/templates/partials/styles/03-page.css \
+		quail/templates/partials/styles/04-admin-components.css \
+		quail/templates/partials/styles/05-inbox-message.css \
+		quail/templates/partials/styles/06-responsive.css \
+		> quail/static/quail.css
+
+css-bundle-restart: css-bundle
+	sudo systemctl restart quail

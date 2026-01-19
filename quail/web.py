@@ -70,12 +70,16 @@ CSRF_COOKIE = "quail_csrf"
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+STATIC_CSS_PATH = STATIC_DIR / "quail.css"
 ENABLE_WS = os.getenv("QUAIL_ENABLE_WS", "true").strip().lower() in {"1", "true", "yes", "on"}
 RAW_ALLOWED_ORIGINS = os.getenv("QUAIL_ALLOWED_ORIGINS", "")
 
 app = FastAPI(title="Quail")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates.env.globals["static_version"] = (
+    str(int(STATIC_CSS_PATH.stat().st_mtime)) if STATIC_CSS_PATH.exists() else "dev"
+)
 LOGGER = logging.getLogger(__name__)
 INBOX_HUB = None
 WS_EVENT_TASK: asyncio.Task | None = None

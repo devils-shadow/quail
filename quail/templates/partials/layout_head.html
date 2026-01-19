@@ -19,11 +19,4 @@
         document.documentElement.style.colorScheme = theme;
       })();
     </script>
-    <style>
-      {% include "partials/styles/01-theme.css" %}
-      {% include "partials/styles/02-shell.css" %}
-      {% include "partials/styles/03-page.css" %}
-      {% include "partials/styles/04-admin-components.css" %}
-      {% include "partials/styles/05-inbox-message.css" %}
-      {% include "partials/styles/06-responsive.css" %}
-    </style>
+    <link rel="stylesheet" href="/static/quail.css?v={{ static_version }}" />
