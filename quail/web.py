@@ -96,7 +96,9 @@ class InboxHub:
         async with self.lock:
             self.connections.setdefault((inbox_filter, is_admin, limit), set()).add(ws)
 
-    async def disconnect(self, ws: WebSocket, inbox_filter: str, is_admin: bool, limit: int) -> None:
+    async def disconnect(
+        self, ws: WebSocket, inbox_filter: str, is_admin: bool, limit: int
+    ) -> None:
         async with self.lock:
             self.connections.get((inbox_filter, is_admin, limit), set()).discard(ws)
 
