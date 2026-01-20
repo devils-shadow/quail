@@ -12,7 +12,10 @@
     hasFilter: {{ "true" if current_inbox else "false" }},
     currentInboxLabel: {{ current_inbox | tojson }},
     inboxQuery: "{% if current_inbox %}?inbox={{ current_inbox | urlencode }}{% endif %}",
-    isAdmin: {{ "true" if is_admin else "false" }}
+    isAdmin: {{ "true" if is_admin else "false" }},
+    pageSize: {{ inbox_page_size }},
+    nextCursor: {{ next_cursor | tojson }},
+    hasMore: {{ "true" if has_more else "false" }}
   };
 </script>
 <script src="/static/inbox.js"></script>

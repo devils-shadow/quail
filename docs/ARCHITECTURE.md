@@ -10,7 +10,7 @@ Quail uses **Postfix** as its public facing SMTP server. The mail daemon listens
 
 A single Python **FastAPI** service provides both the ingest entrypoint and the web UI/API【104907567664902†L49-L53】. The UI is deliberately not publicly accessible—access is restricted to VPN or interface‑restricted networks【104907567664902†L49-L54】. The service binds to localhost by default and can be reverse‑proxied or exposed directly over a VPN as needed【104907567664902†L121-L123】.
 
-Inbox list updates use a WebSocket channel with app-level ping/pong keepalive and polling fallback to preserve live refresh behavior.
+Inbox list updates use a WebSocket channel with app-level ping/pong keepalive and polling fallback to preserve live refresh behavior. The UI renders the newest 20 messages and auto-loads older entries on scroll to keep the DOM lightweight.
 
 ## UI Rendering and Assets
 

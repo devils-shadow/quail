@@ -98,6 +98,7 @@ To upgrade Quail to a newer version:
 ## Daily Operation
 
 - **Inbox access:** Access the web UI via the configured address (VPN or internal network). Message detail pages include HTML, plaintext, and attachments tabs. Admins can enable full HTML rendering in settings; when disabled, only plaintext is shown.
+- **Inbox list:** The inbox renders the newest 20 messages and automatically loads older entries as you scroll; live updates target the newest window.
 - **Inbox controls:** The inbox toolbar includes theme, desktop notification, pause, and delete controls. Desktop notifications only fire when the browser tab is backgrounded and require user permission.
 - **Admin actions:** Use the Unlock workflow and enter the shared admin PIN to perform privileged actions such as changing settings, deleting messages or modifying retention policies. The admin settings page includes ingest visibility metrics (inbox/quarantine/dropped counts, ingest rate, and top sender domains) for the last 24 hours.
 - **Retention policy:** The purge timer automatically deletes inbox messages older than the configured retention period (default 30 days) and quarantined/dropped messages older than the quarantine retention period (default 3 days). Admins can optionally set per-domain quarantine overrides in the settings UI.

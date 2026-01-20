@@ -64,6 +64,8 @@ ADMIN_RATE_LIMIT_MAX_ATTEMPTS = 5
 ADMIN_PIN_MAX_LEN = 9
 ADMIN_PIN_MIN_LEN = 4
 MAX_LIST_ROWS = 200
+INBOX_PAGE_SIZE = 20
+INBOX_MAX_PAGE_SIZE = MAX_LIST_ROWS
 CSRF_COOKIE = "quail_csrf"
 
 BASE_DIR = Path(__file__).parent
@@ -86,23 +88,23 @@ WS_EVENT_TASK: asyncio.Task | None = None
 
 class InboxHub:
     def __init__(self) -> None:
-        self.connections: dict[tuple[str, bool], set[WebSocket]] = {}
+        self.connections: dict[tuple[str, bool, int], set[WebSocket]] = {}
         self.lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket, inbox_filter: str, is_admin: bool) -> None:
+    async def connect(self, ws: WebSocket, inbox_filter: str, is_admin: bool, limit: int) -> None:
         await ws.accept()
         async with self.lock:
-            self.connections.setdefault((inbox_filter, is_admin), set()).add(ws)
+            self.connections.setdefault((inbox_filter, is_admin, limit), set()).add(ws)
 
-    async def disconnect(self, ws: WebSocket, inbox_filter: str, is_admin: bool) -> None:
+    async def disconnect(self, ws: WebSocket, inbox_filter: str, is_admin: bool, limit: int) -> None:
         async with self.lock:
-            self.connections.get((inbox_filter, is_admin), set()).discard(ws)
+            self.connections.get((inbox_filter, is_admin, limit), set()).discard(ws)
 
     async def broadcast(
-        self, inbox_filter: str, is_admin: bool, payload: dict[str, object]
+        self, inbox_filter: str, is_admin: bool, limit: int, payload: dict[str, object]
     ) -> None:
         async with self.lock:
-            connections = list(self.connections.get((inbox_filter, is_admin), set()))
+            connections = list(self.connections.get((inbox_filter, is_admin, limit), set()))
         if not connections:
             return
         stale: list[WebSocket] = []
@@ -114,7 +116,7 @@ class InboxHub:
         if stale:
             async with self.lock:
                 for ws in stale:
-                    self.connections.get((inbox_filter, is_admin), set()).discard(ws)
+                    self.connections.get((inbox_filter, is_admin, limit), set()).discard(ws)
 
 
 def _now() -> datetime:
@@ -558,19 +560,88 @@ def _matches_inbox_filter(envelope_rcpt: str | None, inbox_filter: str) -> bool:
     return cleaned in envelope.split("@", maxsplit=1)[0]
 
 
+def _normalize_inbox_limit_value(value: int | None, default: int) -> int:
+    if value is None or value < 1:
+        return default
+    return min(value, INBOX_MAX_PAGE_SIZE)
+
+
+def _normalize_inbox_limit(value: str | None, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return _normalize_inbox_limit_value(parsed, default)
+
+
+def _parse_inbox_cursor(value: str | None) -> tuple[str, int] | None:
+    if not value:
+        return None
+    received_at, _, raw_id = value.partition("|")
+    if not received_at or not raw_id:
+        return None
+    try:
+        datetime.fromisoformat(received_at)
+    except ValueError:
+        return None
+    try:
+        message_id = int(raw_id)
+    except ValueError:
+        return None
+    if message_id < 0:
+        return None
+    return received_at, message_id
+
+
 def _fetch_inbox_messages(
     db_path: Path, is_admin: bool, inbox_filter: str | None
 ) -> list[dict[str, str]]:
     return list(_iter_messages(db_path, include_quarantined=is_admin, inbox_filter=inbox_filter))
 
 
+def _fetch_inbox_page(
+    db_path: Path,
+    is_admin: bool,
+    inbox_filter: str | None,
+    limit: int,
+    before: tuple[str, int] | None,
+) -> tuple[list[dict[str, str]], str | None, bool]:
+    fetch_limit = limit + 1
+    messages = _iter_messages(
+        db_path,
+        include_quarantined=is_admin,
+        inbox_filter=inbox_filter,
+        limit=fetch_limit,
+        before=before,
+    )
+    has_more = len(messages) > limit
+    if has_more:
+        messages = messages[:limit]
+    next_cursor = None
+    if has_more and messages:
+        last_message = messages[-1]
+        received_at = last_message.get("received_at")
+        message_id = last_message.get("id")
+        if received_at and message_id is not None:
+            next_cursor = f"{received_at}|{message_id}"
+    return messages, next_cursor, has_more
+
+
 def _compute_inbox_etag(
-    is_admin: bool, inbox_filter: str | None, messages: list[dict[str, str]]
+    is_admin: bool,
+    inbox_filter: str | None,
+    messages: list[dict[str, str]],
+    has_more: bool = False,
+    next_cursor: str | None = None,
 ) -> str:
     etag_source = json.dumps(
         {
             "is_admin": is_admin,
             "inbox_filter": inbox_filter or "",
+            "has_more": has_more,
+            "next_cursor": next_cursor or "",
             "messages": [
                 {
                     "id": message.get("id"),
@@ -590,11 +661,19 @@ def _compute_inbox_etag(
 
 
 def _build_inbox_snapshot(
-    db_path: Path, is_admin: bool, inbox_filter: str | None
-) -> tuple[list[dict[str, str]], str]:
-    messages = _fetch_inbox_messages(db_path, is_admin, inbox_filter)
-    etag = _compute_inbox_etag(is_admin, inbox_filter, messages)
-    return messages, etag
+    db_path: Path,
+    is_admin: bool,
+    inbox_filter: str | None,
+    limit: int = MAX_LIST_ROWS,
+    before: tuple[str, int] | None = None,
+) -> tuple[list[dict[str, str]], str, str | None, bool]:
+    messages, next_cursor, has_more = _fetch_inbox_page(
+        db_path, is_admin, inbox_filter, limit, before
+    )
+    etag = _compute_inbox_etag(
+        is_admin, inbox_filter, messages, has_more=has_more, next_cursor=next_cursor
+    )
+    return messages, etag, next_cursor, has_more
 
 
 def _get_message_summary(db_path: Path, message_id: int) -> dict[str, str] | None:
@@ -643,21 +722,36 @@ async def _broadcast_inbox_event(db_path: Path, event: dict[str, object]) -> Non
             event_type = "deleted"
     async with INBOX_HUB.lock:
         targets = list(INBOX_HUB.connections.keys())
-    for inbox_filter, is_admin in targets:
+    for inbox_filter, is_admin, limit in targets:
+        snapshot_only = limit < MAX_LIST_ROWS
         if event_type == "deleted":
             if message_id is None:
                 continue
             if not _matches_inbox_filter(envelope_rcpt, inbox_filter):
                 continue
-            _, etag = _build_inbox_snapshot(db_path, is_admin, inbox_filter or None)
-            payload = {
-                "type": "delta",
-                "added": [],
-                "updated": [],
-                "deleted": [message_id],
-                "etag": etag,
-            }
-            await INBOX_HUB.broadcast(inbox_filter, is_admin, payload)
+            if snapshot_only:
+                messages, etag, next_cursor, has_more = _build_inbox_snapshot(
+                    db_path, is_admin, inbox_filter or None, limit=limit
+                )
+                payload = {
+                    "type": "snapshot",
+                    "messages": messages,
+                    "etag": etag,
+                    "next_cursor": next_cursor,
+                    "has_more": has_more,
+                }
+            else:
+                _, etag, _, _ = _build_inbox_snapshot(
+                    db_path, is_admin, inbox_filter or None, limit=limit
+                )
+                payload = {
+                    "type": "delta",
+                    "added": [],
+                    "updated": [],
+                    "deleted": [message_id],
+                    "etag": etag,
+                }
+            await INBOX_HUB.broadcast(inbox_filter, is_admin, limit, payload)
             continue
         if message_payload is None:
             continue
@@ -665,15 +759,29 @@ async def _broadcast_inbox_event(db_path: Path, event: dict[str, object]) -> Non
             continue
         if not _matches_inbox_filter(message_payload.get("envelope_rcpt"), inbox_filter):
             continue
-        _, etag = _build_inbox_snapshot(db_path, is_admin, inbox_filter or None)
-        payload = {
-            "type": "delta",
-            "added": [message_payload] if event_type == "added" else [],
-            "updated": [message_payload] if event_type == "updated" else [],
-            "deleted": [],
-            "etag": etag,
-        }
-        await INBOX_HUB.broadcast(inbox_filter, is_admin, payload)
+        if snapshot_only:
+            messages, etag, next_cursor, has_more = _build_inbox_snapshot(
+                db_path, is_admin, inbox_filter or None, limit=limit
+            )
+            payload = {
+                "type": "snapshot",
+                "messages": messages,
+                "etag": etag,
+                "next_cursor": next_cursor,
+                "has_more": has_more,
+            }
+        else:
+            _, etag, _, _ = _build_inbox_snapshot(
+                db_path, is_admin, inbox_filter or None, limit=limit
+            )
+            payload = {
+                "type": "delta",
+                "added": [message_payload] if event_type == "added" else [],
+                "updated": [message_payload] if event_type == "updated" else [],
+                "deleted": [],
+                "etag": etag,
+            }
+        await INBOX_HUB.broadcast(inbox_filter, is_admin, limit, payload)
 
 
 def _extract_primary_address(raw_value: str | None) -> str | None:
@@ -850,13 +958,17 @@ def _get_ingest_metrics(db_path: Path, now: datetime | None = None) -> dict[str,
 
 
 def _iter_messages(
-    db_path: Path, include_quarantined: bool, inbox_filter: str | None
+    db_path: Path,
+    include_quarantined: bool,
+    inbox_filter: str | None,
+    limit: int = MAX_LIST_ROWS,
+    before: tuple[str, int] | None = None,
 ) -> Iterable[dict[str, str]]:
     query = """
         SELECT id, received_at, envelope_rcpt, from_addr, subject, date, size_bytes, quarantined
         FROM messages
         {where_clause}
-        ORDER BY received_at DESC
+        ORDER BY received_at DESC, id DESC
         LIMIT ?
     """
     conditions = []
@@ -867,8 +979,12 @@ def _iter_messages(
         condition, value = _build_inbox_filter_condition(inbox_filter)
         conditions.append(condition)
         params.append(value)
+    if before:
+        before_received_at, before_id = before
+        conditions.append("(received_at < ? OR (received_at = ? AND id < ?))")
+        params.extend([before_received_at, before_received_at, before_id])
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    params.append(MAX_LIST_ROWS)
+    params.append(limit)
     with db.get_connection(db_path) as conn:
         rows = conn.execute(query.format(where_clause=where_clause), params).fetchall()
     return [dict(row) for row in rows]
@@ -1201,7 +1317,9 @@ async def inbox(request: Request) -> HTMLResponse:
     settings = get_settings()
     is_admin = _is_admin(request)
     inbox_filter = _normalize_inbox_filter(request.query_params.get("inbox"))
-    messages = _fetch_inbox_messages(settings.db_path, is_admin, inbox_filter)
+    messages, next_cursor, has_more = _fetch_inbox_page(
+        settings.db_path, is_admin, inbox_filter, INBOX_PAGE_SIZE, None
+    )
     return templates.TemplateResponse(
         "inbox.html",
         {
@@ -1210,6 +1328,9 @@ async def inbox(request: Request) -> HTMLResponse:
             "is_admin": is_admin,
             "current_inbox": inbox_filter or "",
             "enable_ws": ENABLE_WS,
+            "has_more": has_more,
+            "inbox_page_size": INBOX_PAGE_SIZE,
+            "next_cursor": next_cursor,
             "body_class": "list-view",
         },
     )
@@ -1220,14 +1341,26 @@ async def inbox_api(request: Request) -> JSONResponse:
     settings = get_settings()
     is_admin = _is_admin(request)
     inbox_filter = _normalize_inbox_filter(request.query_params.get("inbox"))
-    messages, etag = _build_inbox_snapshot(settings.db_path, is_admin, inbox_filter)
+    limit = _normalize_inbox_limit(request.query_params.get("limit"), MAX_LIST_ROWS)
+    before = _parse_inbox_cursor(request.query_params.get("before"))
+    messages, etag, next_cursor, has_more = _build_inbox_snapshot(
+        settings.db_path, is_admin, inbox_filter, limit=limit, before=before
+    )
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
-    return JSONResponse({"messages": messages, "is_admin": is_admin}, headers={"ETag": etag})
+    return JSONResponse(
+        {
+            "messages": messages,
+            "is_admin": is_admin,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        },
+        headers={"ETag": etag},
+    )
 
 
 @app.websocket("/ws/inbox")
-async def inbox_ws(ws: WebSocket, inbox: str | None = None) -> None:
+async def inbox_ws(ws: WebSocket, inbox: str | None = None, limit: int | None = None) -> None:
     if not ENABLE_WS:
         await ws.accept()
         await ws.send_json({"type": "error", "detail": "WebSocket inbox disabled."})
@@ -1237,14 +1370,25 @@ async def inbox_ws(ws: WebSocket, inbox: str | None = None) -> None:
         await ws.close(code=1008)
         return
     inbox_filter = _normalize_inbox_filter(inbox) or ""
+    ws_limit = _normalize_inbox_limit_value(limit, MAX_LIST_ROWS)
     is_admin = _is_admin_token(ws.cookies.get(ADMIN_SESSION_COOKIE))
     if INBOX_HUB is None:
         await ws.close()
         return
-    await INBOX_HUB.connect(ws, inbox_filter, is_admin)
+    await INBOX_HUB.connect(ws, inbox_filter, is_admin, ws_limit)
     settings = get_settings()
-    messages, etag = _build_inbox_snapshot(settings.db_path, is_admin, inbox_filter or None)
-    await ws.send_json({"type": "snapshot", "messages": messages, "etag": etag})
+    messages, etag, next_cursor, has_more = _build_inbox_snapshot(
+        settings.db_path, is_admin, inbox_filter or None, limit=ws_limit
+    )
+    await ws.send_json(
+        {
+            "type": "snapshot",
+            "messages": messages,
+            "etag": etag,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
+    )
     try:
         while True:
             data = await ws.receive_json()
@@ -1253,7 +1397,7 @@ async def inbox_ws(ws: WebSocket, inbox: str | None = None) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        await INBOX_HUB.disconnect(ws, inbox_filter, is_admin)
+        await INBOX_HUB.disconnect(ws, inbox_filter, is_admin, ws_limit)
 
 
 @app.get("/message/{message_id}", response_class=HTMLResponse)

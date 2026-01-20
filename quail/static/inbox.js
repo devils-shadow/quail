@@ -11,17 +11,52 @@ const hasFilter = Boolean(config.hasFilter);
 const currentInboxLabel = typeof config.currentInboxLabel === "string" ? config.currentInboxLabel : "";
 const baseTitle = document.title;
 const inboxQuery = config.inboxQuery || "";
-const inboxApiUrl = `/api/inbox${inboxQuery}`;
+const inboxParams = new URLSearchParams(inboxQuery ? inboxQuery.slice(1) : "");
+const rawPageSize = Number(config.pageSize);
+const pageSize =
+  Number.isFinite(rawPageSize) && rawPageSize > 0 ? Math.min(rawPageSize, 200) : 20;
 const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-const wsUrl = `${wsProtocol}://${window.location.host}/ws/inbox${inboxQuery}`;
+const buildInboxQuery = (before, limit = pageSize) => {
+  const params = new URLSearchParams(inboxParams);
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+  if (before) {
+    params.set("before", before);
+  } else {
+    params.delete("before");
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+const buildInboxApiUrl = (before, limit = pageSize) =>
+  `/api/inbox${buildInboxQuery(before, limit)}`;
+const wsUrl = `${wsProtocol}://${window.location.host}/ws/inbox${buildInboxQuery(
+  null,
+  pageSize
+)}`;
 const isAdmin = Boolean(config.isAdmin);
-const tableBody = document.querySelector(".inbox-table--body tbody");
+const tableElement = document.querySelector(".inbox-table--body");
+const liveTbody = tableElement ? tableElement.querySelector("tbody") : null;
+const olderTbody = tableElement ? document.createElement("tbody") : null;
+if (tableElement && olderTbody) {
+  tableElement.appendChild(olderTbody);
+}
 let rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
+let liveRows = liveTbody
+  ? Array.from(liveTbody.querySelectorAll("tr[data-message-id]"))
+  : [];
 let emptyRow = document.querySelector("[data-empty-state]");
 const listScrollBody = document.querySelector(".list-scroll-card--inbox .list-scroll-body");
 const listScrollCard = document.querySelector(".list-scroll-card--inbox");
 const trashButton = document.getElementById("trash-button");
 const pauseButton = document.getElementById("pause-button");
+let liveNextCursor = typeof config.nextCursor === "string" ? config.nextCursor : null;
+let liveHasMore = Boolean(config.hasMore);
+let pagingCursor = liveNextCursor;
+let pagingHasMore = liveHasMore;
+let hasLoadedOlder = false;
+let loadingOlder = false;
 let messageCache = new Map();
 let refreshTimer = null;
 let refreshIntervalMs = pollingIntervalMs;
@@ -43,6 +78,9 @@ const notifyCooldownMs = 5000;
 
 const resetRows = () => {
   rows = Array.from(document.querySelectorAll("tr[data-message-id]"));
+  liveRows = liveTbody
+    ? Array.from(liveTbody.querySelectorAll("tr[data-message-id]"))
+    : [];
   emptyRow = document.querySelector("[data-empty-state]");
 };
 
@@ -117,6 +155,153 @@ const buildEmptyRow = () => {
   cell.appendChild(emptyState);
   row.appendChild(cell);
   return row;
+};
+
+const updateLivePaging = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+  if (typeof payload.next_cursor === "string") {
+    liveNextCursor = payload.next_cursor;
+  } else if (payload.next_cursor === null) {
+    liveNextCursor = null;
+  }
+  if (typeof payload.has_more === "boolean") {
+    liveHasMore = payload.has_more;
+  }
+  if (!hasLoadedOlder) {
+    pagingCursor = liveNextCursor;
+    pagingHasMore = liveHasMore;
+  }
+};
+
+const updatePagingFromPayload = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+  if (typeof payload.next_cursor === "string") {
+    pagingCursor = payload.next_cursor;
+  } else if (payload.next_cursor === null) {
+    pagingCursor = null;
+  }
+  if (typeof payload.has_more === "boolean") {
+    pagingHasMore = payload.has_more;
+  }
+};
+
+const getExistingIds = () => new Set(rows.map((row) => String(row.dataset.messageId)));
+
+const appendOlderMessages = (messages) => {
+  if (!olderTbody || !Array.isArray(messages) || !messages.length) {
+    return;
+  }
+  const existingIds = getExistingIds();
+  const fragment = document.createDocumentFragment();
+  messages.forEach((message) => {
+    const id = String(message.id);
+    if (existingIds.has(id)) {
+      return;
+    }
+    fragment.appendChild(buildMessageRow(message));
+  });
+  if (!fragment.childNodes.length) {
+    return;
+  }
+  olderTbody.appendChild(fragment);
+  resetRows();
+  applyHidden();
+  applyReceivedFormatting();
+  updateScrollCardState();
+};
+
+const prependOlderMessages = (messages) => {
+  if (!olderTbody || !Array.isArray(messages) || !messages.length) {
+    return;
+  }
+  const existingIds = getExistingIds();
+  const fragment = document.createDocumentFragment();
+  messages.forEach((message) => {
+    const id = String(message.id);
+    if (existingIds.has(id)) {
+      return;
+    }
+    fragment.appendChild(buildMessageRow(message));
+  });
+  if (!fragment.childNodes.length) {
+    return;
+  }
+  olderTbody.prepend(fragment);
+  resetRows();
+  applyHidden();
+  applyReceivedFormatting();
+  updateScrollCardState();
+};
+
+const shouldPrefetchOlder = () => {
+  if (!listScrollBody) {
+    return false;
+  }
+  return listScrollBody.scrollHeight <= listScrollBody.clientHeight + 1;
+};
+
+const loadOlderMessages = async () => {
+  if (!pagingHasMore || !pagingCursor || loadingOlder) {
+    return;
+  }
+  loadingOlder = true;
+  try {
+    const response = await fetch(buildInboxApiUrl(pagingCursor), { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    if (!payload || !Array.isArray(payload.messages)) {
+      return;
+    }
+    if (payload.messages.length) {
+      appendOlderMessages(payload.messages);
+      hasLoadedOlder = true;
+    }
+    updatePagingFromPayload(payload);
+  } catch (error) {
+    // Ignore paging errors.
+  } finally {
+    loadingOlder = false;
+    if (pagingHasMore && pagingCursor && shouldPrefetchOlder()) {
+      loadOlderMessages();
+    }
+  }
+};
+
+const maybeLoadOlder = () => {
+  if (!pagingHasMore || !pagingCursor || loadingOlder) {
+    return;
+  }
+  loadOlderMessages();
+};
+
+const setupInfiniteScroll = () => {
+  if (!listScrollBody || !tableElement) {
+    return;
+  }
+  const sentinel = document.createElement("div");
+  sentinel.setAttribute("aria-hidden", "true");
+  sentinel.style.height = "1px";
+  listScrollBody.appendChild(sentinel);
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          maybeLoadOlder();
+        }
+      });
+    },
+    { root: listScrollBody, rootMargin: "200px 0px", threshold: 0 }
+  );
+  observer.observe(sentinel);
+  if (pagingHasMore && pagingCursor && shouldPrefetchOlder()) {
+    loadOlderMessages();
+  }
 };
 
 const getCurrentMessages = () => Array.from(messageCache.values());
@@ -359,11 +544,19 @@ const renderMessagesFromCache = () => {
 };
 
 const setCache = (messages) => {
+  const previousMessages = Array.from(messageCache.values());
   messageCache = new Map();
   messages.forEach((message) => {
     messageCache.set(String(message.id), message);
   });
   renderMessagesFromCache();
+  if (hasLoadedOlder && previousMessages.length) {
+    const nextIds = new Set(messages.map((message) => String(message.id)));
+    const dropped = previousMessages.filter((message) => !nextIds.has(String(message.id)));
+    if (dropped.length) {
+      prependOlderMessages(dropped);
+    }
+  }
 };
 
 const applyDelta = (payload) => {
@@ -393,7 +586,7 @@ const applyDelta = (payload) => {
 };
 
 const renderMessages = (messages) => {
-  if (!tableBody) {
+  if (!liveTbody) {
     return;
   }
   const fragment = document.createDocumentFragment();
@@ -403,7 +596,7 @@ const renderMessages = (messages) => {
   const emptyStateRow = buildEmptyRow();
   emptyStateRow.style.display = messages.length ? "none" : "table-row";
   fragment.appendChild(emptyStateRow);
-  tableBody.replaceChildren(fragment);
+  liveTbody.replaceChildren(fragment);
   resetRows();
   applyHidden();
   applyReceivedFormatting();
@@ -484,10 +677,10 @@ const startReceivedTicker = () => {
 };
 
 const hasSameMessages = (messages) => {
-  if (rows.length !== messages.length) {
+  if (liveRows.length !== messages.length) {
     return false;
   }
-  return rows.every((row, index) => row.dataset.messageId == messages[index].id);
+  return liveRows.every((row, index) => row.dataset.messageId == messages[index].id);
 };
 
 const isPaused = () => window.sessionStorage.getItem(pauseKey) === "true";
@@ -531,7 +724,7 @@ const refreshInbox = async () => {
     if (lastEtag) {
       headers["If-None-Match"] = lastEtag;
     }
-    const response = await fetch(inboxApiUrl, { cache: "no-store", headers });
+    const response = await fetch(buildInboxApiUrl(), { cache: "no-store", headers });
     if (response.status === 304) {
       return;
     }
@@ -549,6 +742,7 @@ const refreshInbox = async () => {
     if (!payload || !Array.isArray(payload.messages)) {
       return;
     }
+    updateLivePaging(payload);
     if (!hasSameMessages(payload.messages)) {
       setCache(payload.messages);
     }
@@ -640,12 +834,13 @@ const resetWsRetry = () => {
 
 const forceSnapshotRefresh = async () => {
   try {
-    const response = await fetch(inboxApiUrl, { cache: "no-store" });
+    const response = await fetch(buildInboxApiUrl(), { cache: "no-store" });
     if (!response.ok) {
       return;
     }
     const payload = await response.json();
     if (payload && Array.isArray(payload.messages)) {
+      updateLivePaging(payload);
       setCache(payload.messages);
     }
   } catch (error) {
@@ -672,6 +867,7 @@ const handleWsMessage = (event) => {
   }
   if (payload.type === "snapshot") {
     if (Array.isArray(payload.messages)) {
+      updateLivePaging(payload);
       setCache(payload.messages);
     }
     if (payload.etag) {
@@ -770,8 +966,8 @@ if (trashButton) {
   });
 }
 
-if (tableBody) {
-  tableBody.addEventListener("click", (event) => {
+if (tableElement) {
+  tableElement.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) {
       return;
@@ -887,5 +1083,11 @@ applyHidden();
 applyReceivedFormatting();
 updateScrollCardState();
 startReceivedTicker();
+setupInfiniteScroll();
 
-window.addEventListener("resize", updateScrollCardState);
+window.addEventListener("resize", () => {
+  updateScrollCardState();
+  if (pagingHasMore && pagingCursor && shouldPrefetchOlder()) {
+    loadOlderMessages();
+  }
+});
