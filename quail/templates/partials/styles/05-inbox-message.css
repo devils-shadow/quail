@@ -66,6 +66,22 @@
         }
       }
 
+      .inbox-table td.from-col:has(.badge) {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+      }
+
+      .inbox-table td.from-col:has(.badge) .from-text {
+        overflow-wrap: anywhere;
+      }
+
+      .inbox-table td.from-col:has(.badge) .badge {
+        float: right;
+        margin-left: 8px;
+        margin-top: 2px;
+      }
+
       .table th:last-child,
       .table td:last-child {
         text-align: right;
