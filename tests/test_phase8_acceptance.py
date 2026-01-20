@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from quail import db, ingest, purge, settings
-from quail.web import app
+from quail.web import INBOX_PAGE_SIZE, app
 from tests.helpers import get_csrf_token
 
 pytestmark = [pytest.mark.integration, pytest.mark.api]
@@ -355,5 +355,9 @@ def test_acceptance_inbox_ui_loads_under_expected_volume(tmp_path, monkeypatch) 
         response = client.get("/inbox")
 
         assert response.status_code == 200
-        assert "Load test 0" in response.text
-        assert "Load test 119" in response.text
+        newest_index = 119
+        oldest_index = 120 - INBOX_PAGE_SIZE
+        excluded_index = oldest_index - 1
+        assert f"Load test {newest_index}" in response.text
+        assert f"Load test {oldest_index}" in response.text
+        assert f"Load test {excluded_index}" not in response.text
